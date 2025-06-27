@@ -4,9 +4,14 @@ import { StudyVerificationService } from './studyVerification';
 
 export class PKCalculationService {
   static calculatePKMetrics(input: PatientInput): PKResult {
-    const drugProfile = drugProfiles[input.antibioticName.toLowerCase().replace(/[-\s]/g, '')];
+    // Normalize the drug name to match drugProfiles keys
+    const normalizedDrugName = this.normalizeDrugName(input.antibioticName);
+    const drugProfile = drugProfiles[normalizedDrugName];
     
     if (!drugProfile) {
+      console.error('Available drug profiles:', Object.keys(drugProfiles));
+      console.error('Requested drug name:', input.antibioticName);
+      console.error('Normalized drug name:', normalizedDrugName);
       throw new Error(`Drug profile not found for ${input.antibioticName}`);
     }
 
@@ -52,6 +57,18 @@ export class PKCalculationService {
       rationale: doseRecommendation.rationale,
       concentrationCurve
     };
+  }
+
+  private static normalizeDrugName(drugName: string): string {
+    // Handle specific drug name mappings
+    const drugNameMappings: Record<string, string> = {
+      'piperacillintazobactam': 'piperacillinTazobactam',
+      'piperacillin-tazobactam': 'piperacillinTazobactam',
+      'piperacillin tazobactam': 'piperacillinTazobactam'
+    };
+
+    const normalized = drugName.toLowerCase().replace(/[-\s]/g, '');
+    return drugNameMappings[normalized] || normalized;
   }
 
   private static calculateCRRTClearance(input: PatientInput, pk: PKParameters): number {
