@@ -119,7 +119,7 @@ export const PKResultsDisplay: React.FC<PKResultsDisplayProps> = ({ results, mic
                     y={mic} 
                     stroke="#dc2626" 
                     strokeDasharray="5 5"
-                    label={{ value: `MIC: ${mic} mg/L`, position: 'topRight' }}
+                    label={{ value: `MIC: ${mic} mg/L`, position: 'top' }}
                   />
                 )}
               </LineChart>
