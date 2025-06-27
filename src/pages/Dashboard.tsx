@@ -5,6 +5,7 @@ import { PatientInputForm } from '../components/PatientInputForm';
 import { PKResultsDisplay } from '../components/PKResultsDisplay';
 import { AIIntegration } from '../components/AIIntegration';
 import { ResearchManagement } from '../components/ResearchManagement';
+import { ApiKeyManagement } from '../components/ApiKeyManagement';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent } from '@/components/ui/card';
 import { PKCalculationService } from '../services/pkCalculations';
@@ -43,9 +44,10 @@ export const Dashboard = () => {
       
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         <Tabs defaultValue="dosing" className="w-full">
-          <TabsList className="grid w-full grid-cols-2">
+          <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="dosing">Dosing Calculator</TabsTrigger>
             <TabsTrigger value="research">Research Management</TabsTrigger>
+            <TabsTrigger value="settings">API Settings</TabsTrigger>
           </TabsList>
           
           <TabsContent value="dosing" className="space-y-6">
@@ -83,6 +85,10 @@ export const Dashboard = () => {
           
           <TabsContent value="research">
             <ResearchManagement />
+          </TabsContent>
+          
+          <TabsContent value="settings">
+            <ApiKeyManagement />
           </TabsContent>
         </Tabs>
       </div>

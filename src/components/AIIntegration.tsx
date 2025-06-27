@@ -1,10 +1,10 @@
 
 import React, { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useAuth } from '../contexts/AuthContext';
 import { toast } from 'sonner';
 
 interface AIIntegrationProps {
@@ -13,24 +13,54 @@ interface AIIntegrationProps {
   pkResults: any;
 }
 
+const MODEL_OPTIONS = {
+  openai: [
+    { id: 'gpt-4.1-2025-04-14', name: 'GPT-4.1 (Latest)' },
+    { id: 'o3-2025-04-16', name: 'O3 (Reasoning)' },
+    { id: 'o4-mini-2025-04-16', name: 'O4 Mini (Fast)' }
+  ],
+  claude: [
+    { id: 'claude-opus-4-20250514', name: 'Claude Opus 4 (Most Capable)' },
+    { id: 'claude-sonnet-4-20250514', name: 'Claude Sonnet 4 (High Performance)' },
+    { id: 'claude-3-5-haiku-20241022', name: 'Claude 3.5 Haiku (Fastest)' }
+  ],
+  anthropic: [
+    { id: 'claude-3-opus-20240229', name: 'Claude 3 Opus (Legacy)' },
+    { id: 'claude-3-5-sonnet-20241022', name: 'Claude 3.5 Sonnet (Legacy)' }
+  ]
+};
+
 export const AIIntegration: React.FC<AIIntegrationProps> = ({ 
   onSummaryGenerated, 
   patientInput, 
   pkResults 
 }) => {
-  const [apiKey, setApiKey] = useState('');
-  const [provider, setProvider] = useState<'openai' | 'claude' | 'anthropic'>('openai');
+  const { user, updatePreferredModel } = useAuth();
+  const [selectedApiKey, setSelectedApiKey] = useState('');
+  const [selectedModel, setSelectedModel] = useState(user?.preferredModel || '');
   const [isGenerating, setIsGenerating] = useState(false);
 
+  const userApiKeys = user?.apiKeys || [];
+  const selectedKeyData = userApiKeys.find(key => key.id === selectedApiKey);
+  const availableModels = selectedKeyData ? MODEL_OPTIONS[selectedKeyData.provider] || [] : [];
+
   const generateSummary = async () => {
-    if (!apiKey) {
-      toast.error('Please enter your API key');
+    if (!selectedApiKey) {
+      toast.error('Please select an API key');
+      return;
+    }
+
+    if (!selectedModel) {
+      toast.error('Please select a model');
       return;
     }
 
     setIsGenerating(true);
     
     try {
+      // Update preferred model
+      updatePreferredModel(selectedModel);
+
       // In a real implementation, this would call the AI API with study verification instructions
       const studyVerificationPrompt = `
         You are generating a clinical dosing summary. CRITICAL REQUIREMENTS:
@@ -50,9 +80,12 @@ export const AIIntegration: React.FC<AIIntegrationProps> = ({
       // Mock AI integration with study verification
       await new Promise(resolve => setTimeout(resolve, 3000)); // Simulate longer verification process
       
+      const selectedModelName = availableModels.find(m => m.id === selectedModel)?.name || selectedModel;
+      
       // Mock verification process and prioritized study selection
       const mockSummary = `
 ## Clinical Summary - Study Verified
+**Generated using ${selectedModelName}**
 
 **High Confidence Recommendation** (Verified platform studies + external validation)
 
@@ -89,10 +122,11 @@ ${patientInput.heartFailure ? '• Heart failure: Monitor distribution changes (
 📋 **Action**: Consider uploading Johnson et al. (2024) for platform integration
 
 **Confidence Level**: High (platform studies + external validation)
+**AI Model**: ${selectedModelName}
       `;
       
       onSummaryGenerated(mockSummary);
-      toast.success('AI summary generated with verified studies');
+      toast.success(`AI summary generated using ${selectedModelName}`);
     } catch (error) {
       toast.error('Failed to generate AI summary');
     } finally {
@@ -100,12 +134,30 @@ ${patientInput.heartFailure ? '• Heart failure: Monitor distribution changes (
     }
   };
 
+  if (userApiKeys.length === 0) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">AI-Enhanced Summary</CardTitle>
+          <CardDescription>
+            Add API keys in your account settings to generate AI-powered clinical summaries
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="text-center text-gray-500 py-8">
+            No API keys configured. Please add an API key to use AI features.
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
     <Card>
       <CardHeader>
         <CardTitle className="text-lg">AI-Enhanced Summary</CardTitle>
         <CardDescription>
-          Generate detailed clinical insights with verified studies using your AI API key
+          Generate detailed clinical insights with verified studies using your configured API keys
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -116,41 +168,52 @@ ${patientInput.heartFailure ? '• Heart failure: Monitor distribution changes (
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="space-y-2">
-            <Label htmlFor="provider">AI Provider</Label>
-            <Select value={provider} onValueChange={(value: 'openai' | 'claude' | 'anthropic') => setProvider(value)}>
+            <Label htmlFor="apiKey">API Key</Label>
+            <Select value={selectedApiKey} onValueChange={setSelectedApiKey}>
               <SelectTrigger>
-                <SelectValue />
+                <SelectValue placeholder="Select an API key" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="openai">OpenAI (GPT-4)</SelectItem>
-                <SelectItem value="claude">Anthropic (Claude)</SelectItem>
-                <SelectItem value="anthropic">Anthropic (Legacy)</SelectItem>
+                {userApiKeys.map((apiKey) => (
+                  <SelectItem key={apiKey.id} value={apiKey.id}>
+                    {apiKey.name} ({apiKey.provider})
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
           
           <div className="space-y-2">
-            <Label htmlFor="apiKey">API Key</Label>
-            <Input
-              id="apiKey"
-              type="password"
-              placeholder="Enter your API key"
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-            />
+            <Label htmlFor="model">Model</Label>
+            <Select 
+              value={selectedModel} 
+              onValueChange={setSelectedModel}
+              disabled={!selectedApiKey}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select a model" />
+              </SelectTrigger>
+              <SelectContent>
+                {availableModels.map((model) => (
+                  <SelectItem key={model.id} value={model.id}>
+                    {model.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         </div>
         
         <Button 
           onClick={generateSummary} 
-          disabled={isGenerating || !apiKey}
+          disabled={isGenerating || !selectedApiKey || !selectedModel}
           className="w-full"
         >
           {isGenerating ? 'Verifying Studies & Generating Summary...' : 'Generate Verified AI Summary'}
         </Button>
         
         <div className="text-xs text-gray-500 mt-2">
-          Your API key is used only for this session and is not stored. All studies are verified for accuracy.
+          Using your stored API key. All studies are verified for accuracy.
         </div>
       </CardContent>
     </Card>

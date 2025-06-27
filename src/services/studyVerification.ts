@@ -35,7 +35,7 @@ export class StudyVerificationService {
     const externalStudies = await this.mockExternalStudyVerification(drugName);
     
     // Third pass: Cross-reference and identify newer studies
-    const verifiedStudies = [...relevantPlatformStudies];
+    const verifiedStudies: StudyReference[] = [...relevantPlatformStudies];
     
     for (const external of externalStudies) {
       const newerThanPlatform = relevantPlatformStudies.every(

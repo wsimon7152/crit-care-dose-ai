@@ -1,10 +1,19 @@
-
 export interface User {
   id: string;
   email: string;
   role: 'standard' | 'admin';
   name: string;
   institution?: string;
+  apiKeys?: ApiKeyConfig[];
+  preferredModel?: string;
+}
+
+export interface ApiKeyConfig {
+  id: string;
+  provider: 'openai' | 'claude' | 'anthropic';
+  name: string;
+  key: string;
+  createdAt: Date;
 }
 
 export interface PatientInput {
