@@ -1,0 +1,70 @@
+
+export interface User {
+  id: string;
+  email: string;
+  role: 'standard' | 'admin';
+  name: string;
+  institution?: string;
+}
+
+export interface PatientInput {
+  age?: number;
+  gender?: 'male' | 'female';
+  weight?: number;
+  liverDisease: boolean;
+  heartDisease: boolean;
+  heartFailure: boolean;
+  dialysateFlowRate?: number;
+  bloodFlowRate?: number;
+  preFilterReplacementRate?: number;
+  postFilterReplacementRate?: number;
+  ultrafiltrationRate?: number;
+  microbiologicalCulture?: string;
+  ecmoTreatment: boolean;
+  antibioticName: string;
+  infectionType?: string;
+  sourceOfInfection?: string;
+  mic?: number;
+  crrtModality?: 'CVVH' | 'CVVHD' | 'CVVHDF';
+}
+
+export interface PKParameters {
+  standardDose: number;
+  interval: number;
+  volumeOfDistribution: number;
+  proteinBinding: number;
+  crrtClearance: number;
+  halfLife: number;
+}
+
+export interface PKResult {
+  totalClearance: number;
+  auc024: number;
+  percentTimeAboveMic: number;
+  doseRecommendation: string;
+  rationale: string;
+  concentrationCurve: Array<{ time: number; concentration: number }>;
+}
+
+export interface Research {
+  id: string;
+  title: string;
+  authors: string;
+  year: number;
+  url?: string;
+  pdfPath?: string;
+  status: 'pending' | 'approved' | 'rejected';
+  uploadedBy: string;
+  uploadedAt: Date;
+  tags: string[];
+  notes?: string;
+  adminNotes?: string;
+}
+
+export interface DrugProfile {
+  name: string;
+  pkParameters: PKParameters;
+  references: string[];
+  micBreakpoints: Record<string, number>;
+  dosingSuggestions: string[];
+}
