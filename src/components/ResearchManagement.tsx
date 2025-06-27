@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -7,6 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Upload } from 'lucide-react';
 import { toast } from 'sonner';
 import { Research } from '../types';
 import { useAuth } from '../contexts/AuthContext';
@@ -15,6 +15,7 @@ export const ResearchManagement = () => {
   const { user } = useAuth();
   const [uploadUrl, setUploadUrl] = useState('');
   const [uploadNote, setUploadNote] = useState('');
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
 
   // Mock research data
@@ -45,17 +46,38 @@ export const ResearchManagement = () => {
     }
   ]);
 
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file && file.type === 'application/pdf') {
+      setUploadFile(file);
+    } else if (file) {
+      toast.error('Please select a PDF file');
+      e.target.value = '';
+    }
+  };
+
   const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!uploadUrl) return;
+    if (!uploadUrl && !uploadFile) {
+      toast.error('Please provide either a URL or upload a PDF file');
+      return;
+    }
 
     setIsUploading(true);
     
     // Mock upload process
     setTimeout(() => {
-      toast.success('Research uploaded for admin review');
+      if (uploadFile) {
+        toast.success(`PDF "${uploadFile.name}" uploaded for admin review`);
+      } else {
+        toast.success('Research uploaded for admin review');
+      }
       setUploadUrl('');
       setUploadNote('');
+      setUploadFile(null);
+      // Reset file input
+      const fileInput = document.getElementById('pdf-upload') as HTMLInputElement;
+      if (fileInput) fileInput.value = '';
       setIsUploading(false);
     }, 1500);
   };
@@ -91,8 +113,30 @@ export const ResearchManagement = () => {
                     placeholder="https://pubmed.ncbi.nlm.nih.gov/... or DOI"
                     value={uploadUrl}
                     onChange={(e) => setUploadUrl(e.target.value)}
-                    required
                   />
+                </div>
+                
+                <div className="flex items-center justify-center">
+                  <div className="text-sm text-gray-500">OR</div>
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="pdf-upload">Upload PDF File</Label>
+                  <div className="flex items-center space-x-2">
+                    <Input
+                      id="pdf-upload"
+                      type="file"
+                      accept=".pdf"
+                      onChange={handleFileChange}
+                      className="file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                    />
+                    <Upload className="h-4 w-4 text-gray-400" />
+                  </div>
+                  {uploadFile && (
+                    <p className="text-sm text-green-600">
+                      Selected: {uploadFile.name}
+                    </p>
+                  )}
                 </div>
                 
                 <div className="space-y-2">
@@ -129,16 +173,24 @@ export const ResearchManagement = () => {
                         {research.notes && (
                           <p className="text-sm text-gray-700">{research.notes}</p>
                         )}
-                        {research.url && (
-                          <a 
-                            href={research.url} 
-                            target="_blank" 
-                            rel="noopener noreferrer"
-                            className="text-blue-600 hover:text-blue-800 text-sm"
-                          >
-                            View Study →
-                          </a>
-                        )}
+                        <div className="flex items-center space-x-4">
+                          {research.url && (
+                            <a 
+                              href={research.url} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="text-blue-600 hover:text-blue-800 text-sm"
+                            >
+                              View Study →
+                            </a>
+                          )}
+                          {research.pdfPath && (
+                            <span className="text-sm text-gray-600 flex items-center">
+                              <Upload className="h-3 w-3 mr-1" />
+                              PDF Available
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </CardContent>
                   </Card>
@@ -161,6 +213,17 @@ export const ResearchManagement = () => {
                           </div>
                           <h4 className="font-semibold">{research.title}</h4>
                           <p className="text-sm text-gray-600">{research.authors} ({research.year})</p>
+                          <div className="flex items-center space-x-4">
+                            {research.url && (
+                              <span className="text-xs text-blue-600">URL provided</span>
+                            )}
+                            {research.pdfPath && (
+                              <span className="text-xs text-green-600 flex items-center">
+                                <Upload className="h-3 w-3 mr-1" />
+                                PDF uploaded
+                              </span>
+                            )}
+                          </div>
                           {research.notes && (
                             <p className="text-sm text-gray-700 bg-gray-50 p-2 rounded">
                               <strong>Submitter notes:</strong> {research.notes}
