@@ -68,7 +68,7 @@ export const PKResultsDisplay: React.FC<PKResultsDisplayProps> = ({ results, mic
 
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">%T > MIC</CardTitle>
+            <CardTitle className="text-sm font-medium">%T &gt; MIC</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="flex items-center space-x-2">
