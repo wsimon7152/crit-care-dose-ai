@@ -28,8 +28,9 @@ export class PKCalculationService {
     // Calculate %T>MIC if MIC is provided
     let percentTimeAboveMic = 0;
     if (input.mic) {
-      const ke = totalClearance / (pk.volumeOfDistribution * (input.weight || 70));
-      percentTimeAboveMic = this.calculatePercentTimeAboveMIC(dose, pk.volumeOfDistribution, ke, input.mic, pk.interval);
+      const vd = pk.volumeOfDistribution * (input.weight || 70);
+      const ke = totalClearance / vd;
+      percentTimeAboveMic = this.calculatePercentTimeAboveMIC(dose, vd, ke, input.mic, pk.interval);
     }
     
     // Generate concentration-time curve
@@ -74,14 +75,30 @@ export class PKCalculationService {
   }
 
   private static calculatePercentTimeAboveMIC(dose: number, vd: number, ke: number, mic: number, interval: number): number {
+    // Calculate initial concentration after dose
     const c0 = dose / vd;
-    const timeToMIC = Math.log(c0 / mic) / ke;
     
-    if (timeToMIC < 0 || timeToMIC > interval) {
-      return timeToMIC < 0 ? 0 : 100;
+    // If initial concentration is below MIC, no time above MIC
+    if (c0 <= mic) {
+      return 0;
     }
     
-    return (timeToMIC / interval) * 100;
+    // Calculate time when concentration drops to MIC level
+    // C(t) = C0 * e^(-ke * t)
+    // When C(t) = MIC: MIC = C0 * e^(-ke * t)
+    // Solving for t: t = ln(C0/MIC) / ke
+    const timeToReachMIC = Math.log(c0 / mic) / ke;
+    
+    // If time to reach MIC is greater than dosing interval, 
+    // concentration stays above MIC for the entire interval
+    if (timeToReachMIC >= interval) {
+      return 100;
+    }
+    
+    // Calculate percentage of dosing interval where concentration > MIC
+    const percentTimeAbove = (timeToReachMIC / interval) * 100;
+    
+    return Math.max(0, percentTimeAbove);
   }
 
   private static generateConcentrationCurve(dose: number, vd: number, ke: number, interval: number) {
