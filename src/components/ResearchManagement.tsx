@@ -175,6 +175,63 @@ export const ResearchManagement = () => {
     toast.success(`"${studyTitle}" has been revoked - calculations will update automatically`);
   };
 
+  // Function to re-analyze an existing study
+  const handleReanalyzeStudy = async (studyId: string) => {
+    if (!selectedApiKey) {
+      toast.error('Please select an API key for re-analysis');
+      return;
+    }
+
+    const study = researchList.find(s => s.id === studyId);
+    if (!study) return;
+
+    const apiKeyData = userApiKeys.find(key => key.id === selectedApiKey);
+    if (!apiKeyData) return;
+
+    try {
+      setIsUploading(true);
+      toast.info('Re-analyzing study...');
+
+      let textContent = '';
+      if (study.pdfPath && study.filename) {
+        textContent = await StudyAnalysisService.extractTextFromPDF(
+          new File([], study.filename, { type: 'application/pdf' })
+        );
+      } else if (study.url) {
+        textContent = await StudyAnalysisService.extractTextFromUrl(study.url);
+      }
+
+      const studyMetadata = await StudyAnalysisService.extractStudyMetadata(
+        textContent,
+        study.filename || study.title,
+        apiKeyData
+      );
+
+      // Update the existing study with new metadata
+      setResearchList(prev => 
+        prev.map(s => 
+          s.id === studyId 
+            ? {
+                ...s,
+                title: studyMetadata.title,
+                authors: studyMetadata.authors,
+                year: studyMetadata.year,
+                tags: [...new Set([...s.tags, ...studyMetadata.tags])], // Merge tags
+                notes: studyMetadata.abstract || s.notes
+              }
+            : s
+        )
+      );
+
+      toast.success(`Study re-analyzed: "${studyMetadata.title}"`);
+    } catch (error) {
+      toast.error('Re-analysis failed - please try again');
+      console.error('Re-analysis error:', error);
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
   const approvedResearch = researchList.filter(r => r.status === 'approved');
   const pendingResearch = researchList.filter(r => r.status === 'pending');
   const userPendingResearch = researchList.filter(r => r.status === 'pending' && r.uploadedBy === user?.email);
@@ -310,12 +367,79 @@ export const ResearchManagement = () => {
             </TabsContent>
             
             <TabsContent value="approved">
+              {/* Re-analysis Controls for Approved Studies */}
+              {userApiKeys.length > 0 && (
+                <div className="mb-4 p-3 bg-green-50 rounded-lg border border-green-200">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      <Brain className="h-4 w-4 text-green-600" />
+                      <Label className="text-sm font-medium">Re-analyze existing studies:</Label>
+                    </div>
+                    <Select value={selectedApiKey} onValueChange={setSelectedApiKey}>
+                      <SelectTrigger className="w-48">
+                        <SelectValue placeholder="Select API key" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {userApiKeys.map((apiKey) => (
+                          <SelectItem key={apiKey.id} value={apiKey.id}>
+                            {apiKey.name} ({apiKey.provider})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <p className="text-xs text-green-600 mt-1">
+                    Extract proper titles from existing studies with filenames
+                  </p>
+                </div>
+              )}
+              
               <div className="space-y-4">
                 {approvedResearch.map((research) => (
                   <Card key={research.id}>
                     <CardContent className="pt-4">
                       <div className="space-y-2">
-                        <h4 className="font-semibold">{research.title}</h4>
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <h4 className="font-semibold">{research.title}</h4>
+                            {research.filename && research.title === research.filename.replace('.pdf', '') && (
+                              <div className="flex items-center gap-2 mt-1">
+                                <Badge variant="outline" className="text-xs bg-yellow-100 text-yellow-700">
+                                  Filename-based title
+                                </Badge>
+                                {userApiKeys.length > 0 && selectedApiKey && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => handleReanalyzeStudy(research.id)}
+                                    disabled={isUploading}
+                                    className="text-xs h-6 px-2"
+                                  >
+                                    {isUploading ? (
+                                      <RefreshCw className="h-3 w-3 animate-spin" />
+                                    ) : (
+                                      <>
+                                        <Brain className="h-3 w-3 mr-1" />
+                                        Re-analyze
+                                      </>
+                                    )}
+                                  </Button>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                          {user?.role === 'admin' && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleRevokeStudy(research.id, research.title)}
+                              className="ml-2 text-red-600 hover:text-red-800 border-red-300"
+                            >
+                              <XCircle className="h-3 w-3 mr-1" />
+                              Revoke
+                            </Button>
+                          )}
+                        </div>
                         <p className="text-sm text-gray-600">{research.authors} ({research.year})</p>
                         <div className="flex flex-wrap gap-1">
                           {research.tags.map((tag) => (
@@ -343,17 +467,6 @@ export const ResearchManagement = () => {
                               <Upload className="h-3 w-3 mr-1" />
                               PDF Available
                             </span>
-                          )}
-                          {user?.role === 'admin' && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleRevokeStudy(research.id, research.title)}
-                              className="ml-auto text-red-600 hover:text-red-800 border-red-300"
-                            >
-                              <XCircle className="h-3 w-3 mr-1" />
-                              Revoke
-                            </Button>
                           )}
                         </div>
                       </div>
