@@ -11,6 +11,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { PKCalculationService } from '../services/pkCalculations';
 import { PatientInput, PKResult } from '../types';
 import { toast } from 'sonner';
+import ReactMarkdown from 'react-markdown';
 
 export const Dashboard = () => {
   const [pkResults, setPkResults] = useState<PKResult | null>(null);
@@ -73,8 +74,8 @@ export const Dashboard = () => {
                 {aiSummary && (
                   <Card>
                     <CardContent className="pt-6">
-                      <div className="prose max-w-none">
-                        <div dangerouslySetInnerHTML={{ __html: aiSummary.replace(/\n/g, '<br/>') }} />
+                      <div className="prose prose-sm max-w-none prose-headings:text-foreground prose-p:text-foreground prose-strong:text-foreground prose-li:text-foreground">
+                        <ReactMarkdown>{aiSummary}</ReactMarkdown>
                       </div>
                     </CardContent>
                   </Card>
