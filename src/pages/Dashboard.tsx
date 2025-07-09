@@ -9,6 +9,7 @@ import { ApiKeyManagement } from '../components/ApiKeyManagement';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent } from '@/components/ui/card';
 import { PKCalculationService } from '../services/pkCalculations';
+import { useResearchUpdates } from '../hooks/use-research-updates';
 import { PatientInput, PKResult } from '../types';
 import { toast } from 'sonner';
 import ReactMarkdown from 'react-markdown';
@@ -18,6 +19,9 @@ export const Dashboard = () => {
   const [currentInput, setCurrentInput] = useState<PatientInput | null>(null);
   const [aiSummary, setAiSummary] = useState<string>('');
   const [isCalculating, setIsCalculating] = useState(false);
+  
+  // Track research updates for automatic recalculation
+  useResearchUpdates();
 
   const handlePatientSubmit = async (input: PatientInput) => {
     setIsCalculating(true);

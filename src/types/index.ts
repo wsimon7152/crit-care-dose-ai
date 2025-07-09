@@ -65,12 +65,13 @@ export interface Research {
   year: number;
   url?: string;
   pdfPath?: string;
-  status: 'pending' | 'approved' | 'rejected';
+  status: 'pending' | 'approved' | 'rejected' | 'revoked';
   uploadedBy: string;
   uploadedAt: Date;
   tags: string[];
   notes?: string;
   adminNotes?: string;
+  filename?: string;
 }
 
 export interface DrugProfile {

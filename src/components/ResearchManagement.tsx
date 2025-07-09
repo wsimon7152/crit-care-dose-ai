@@ -6,10 +6,12 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Upload } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Upload, Brain, RefreshCw, XCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { Research } from '../types';
 import { useAuth } from '../contexts/AuthContext';
+import { StudyAnalysisService } from '../services/studyAnalysis';
 
 export const ResearchManagement = () => {
   const { user } = useAuth();
@@ -17,6 +19,10 @@ export const ResearchManagement = () => {
   const [uploadNote, setUploadNote] = useState('');
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [selectedApiKey, setSelectedApiKey] = useState('');
+  const [useAIAnalysis, setUseAIAnalysis] = useState(true);
+
+  const userApiKeys = user?.apiKeys || [];
 
   // Initialize research data from localStorage or default mock data
   const [researchList, setResearchList] = useState<Research[]>(() => {
@@ -79,46 +85,100 @@ export const ResearchManagement = () => {
       return;
     }
 
+    if (useAIAnalysis && !selectedApiKey) {
+      toast.error('Please select an API key for AI analysis');
+      return;
+    }
+
     setIsUploading(true);
     
-    // Create new research entry
-    const newResearch: Research = {
-      id: Date.now().toString(),
-      title: uploadFile ? uploadFile.name.replace('.pdf', '') : 'Study from URL',
-      authors: 'Submitted by user', // Would normally be extracted from PDF/URL
-      year: new Date().getFullYear(),
-      url: uploadUrl || undefined,
-      pdfPath: uploadFile ? `/uploads/${uploadFile.name}` : undefined,
-      status: 'pending',
-      uploadedBy: user?.email || 'unknown',
-      uploadedAt: new Date(),
-      tags: ['user-submitted'],
-      notes: uploadNote || undefined
-    };
+    try {
+      let studyMetadata = {
+        title: uploadFile ? uploadFile.name.replace('.pdf', '') : 'Study from URL',
+        authors: 'Unknown authors',
+        year: new Date().getFullYear(),
+        abstract: '',
+        tags: ['user-submitted'] as string[]
+      };
 
-    // Mock upload process with actual data persistence
-    setTimeout(() => {
+      // AI-powered study analysis if enabled and API key available
+      if (useAIAnalysis && selectedApiKey) {
+        const apiKeyData = userApiKeys.find(key => key.id === selectedApiKey);
+        if (apiKeyData) {
+          let textContent = '';
+          
+          if (uploadFile) {
+            textContent = await StudyAnalysisService.extractTextFromPDF(uploadFile);
+          } else if (uploadUrl) {
+            textContent = await StudyAnalysisService.extractTextFromUrl(uploadUrl);
+          }
+
+          studyMetadata = await StudyAnalysisService.extractStudyMetadata(
+            textContent,
+            uploadFile?.name || 'URL Study',
+            apiKeyData
+          );
+          
+          toast.success('AI analysis completed - extracted study metadata');
+        }
+      }
+
+      // Create new research entry with extracted metadata
+      const newResearch: Research = {
+        id: Date.now().toString(),
+        title: studyMetadata.title,
+        authors: studyMetadata.authors,
+        year: studyMetadata.year,
+        url: uploadUrl || undefined,
+        pdfPath: uploadFile ? `/uploads/${uploadFile.name}` : undefined,
+        status: 'pending',
+        uploadedBy: user?.email || 'unknown',
+        uploadedAt: new Date(),
+        tags: [...studyMetadata.tags, ...(uploadNote ? ['annotated'] : [])],
+        notes: uploadNote || studyMetadata.abstract || undefined,
+        filename: uploadFile?.name
+      };
+
       // Add the new research to the list
       setResearchList(prev => [...prev, newResearch]);
       
       if (uploadFile) {
-        toast.success(`PDF "${uploadFile.name}" uploaded for admin review`);
+        toast.success(`Study "${studyMetadata.title}" uploaded and analyzed`);
       } else {
-        toast.success('Research uploaded for admin review');
+        toast.success(`Study "${studyMetadata.title}" submitted for review`);
       }
+      
+      // Reset form
       setUploadUrl('');
       setUploadNote('');
       setUploadFile(null);
-      // Reset file input
       const fileInput = document.getElementById('pdf-upload') as HTMLInputElement;
       if (fileInput) fileInput.value = '';
+      
+    } catch (error) {
+      toast.error('Upload failed - please try again');
+      console.error('Upload error:', error);
+    } finally {
       setIsUploading(false);
-    }, 1500);
+    }
+  };
+
+  // Function to revoke an approved study
+  const handleRevokeStudy = (studyId: string, studyTitle: string) => {
+    setResearchList(prev => 
+      prev.map(study => 
+        study.id === studyId 
+          ? { ...study, status: 'revoked' as const }
+          : study
+      )
+    );
+    toast.success(`"${studyTitle}" has been revoked - calculations will update automatically`);
   };
 
   const approvedResearch = researchList.filter(r => r.status === 'approved');
   const pendingResearch = researchList.filter(r => r.status === 'pending');
   const userPendingResearch = researchList.filter(r => r.status === 'pending' && r.uploadedBy === user?.email);
+  const revokedResearch = researchList.filter(r => r.status === 'revoked');
 
   return (
     <div className="space-y-6">
@@ -131,19 +191,64 @@ export const ResearchManagement = () => {
         </CardHeader>
         <CardContent>
           <Tabs defaultValue="upload" className="w-full">
-            <TabsList className={`grid w-full ${user?.role === 'admin' ? 'grid-cols-4' : 'grid-cols-3'}`}>
+            <TabsList className={`grid w-full ${user?.role === 'admin' ? 'grid-cols-5' : 'grid-cols-3'}`}>
               <TabsTrigger value="upload">Upload Research</TabsTrigger>
               <TabsTrigger value="approved">Approved ({approvedResearch.length})</TabsTrigger>
               {user?.role !== 'admin' && (
                 <TabsTrigger value="my-pending">My Pending ({userPendingResearch.length})</TabsTrigger>
               )}
               {user?.role === 'admin' && (
-                <TabsTrigger value="pending">Admin Review ({pendingResearch.length})</TabsTrigger>
+                <>
+                  <TabsTrigger value="pending">Admin Review ({pendingResearch.length})</TabsTrigger>
+                  <TabsTrigger value="revoked">Revoked ({revokedResearch.length})</TabsTrigger>
+                </>
               )}
             </TabsList>
             
             <TabsContent value="upload" className="space-y-4">
               <form onSubmit={handleUpload} className="space-y-4">
+                {/* AI Analysis Toggle */}
+                {userApiKeys.length > 0 && (
+                  <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                    <div className="flex items-center space-x-3 mb-3">
+                      <Brain className="h-5 w-5 text-blue-600" />
+                      <div className="flex items-center space-x-2">
+                        <input
+                          type="checkbox"
+                          id="useAI"
+                          checked={useAIAnalysis}
+                          onChange={(e) => setUseAIAnalysis(e.target.checked)}
+                          className="rounded"
+                        />
+                        <Label htmlFor="useAI" className="font-medium">
+                          Enable AI-powered study analysis
+                        </Label>
+                      </div>
+                    </div>
+                    
+                    {useAIAnalysis && (
+                      <div className="space-y-2">
+                        <Label htmlFor="aiApiKey">API Key for Analysis</Label>
+                        <Select value={selectedApiKey} onValueChange={setSelectedApiKey}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select API key for study analysis" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {userApiKeys.map((apiKey) => (
+                              <SelectItem key={apiKey.id} value={apiKey.id}>
+                                {apiKey.name} ({apiKey.provider})
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <p className="text-xs text-blue-600">
+                          AI will extract study title, authors, year, and generate relevant tags
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+                
                 <div className="space-y-2">
                   <Label htmlFor="url">PubMed URL or DOI</Label>
                   <Input
@@ -187,8 +292,19 @@ export const ResearchManagement = () => {
                   />
                 </div>
                 
-                <Button type="submit" disabled={isUploading}>
-                  {isUploading ? 'Uploading...' : 'Submit for Review'}
+                <Button 
+                  type="submit" 
+                  disabled={isUploading || (useAIAnalysis && !selectedApiKey)}
+                  className="w-full"
+                >
+                  {isUploading ? (
+                    <>
+                      <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                      {useAIAnalysis ? 'Analyzing & Uploading...' : 'Uploading...'}
+                    </>
+                  ) : (
+                    'Submit for Review'
+                  )}
                 </Button>
               </form>
             </TabsContent>
@@ -227,6 +343,17 @@ export const ResearchManagement = () => {
                               <Upload className="h-3 w-3 mr-1" />
                               PDF Available
                             </span>
+                          )}
+                          {user?.role === 'admin' && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleRevokeStudy(research.id, research.title)}
+                              className="ml-auto text-red-600 hover:text-red-800 border-red-300"
+                            >
+                              <XCircle className="h-3 w-3 mr-1" />
+                              Revoke
+                            </Button>
                           )}
                         </div>
                       </div>
@@ -349,7 +476,53 @@ export const ResearchManagement = () => {
                 </div>
               </TabsContent>
             )}
-          </Tabs>
+            
+            {user?.role === 'admin' && (
+              <TabsContent value="revoked">
+                <div className="space-y-4">
+                  {revokedResearch.length === 0 ? (
+                    <div className="text-center py-8 text-gray-500">
+                      <p>No revoked studies</p>
+                    </div>
+                  ) : (
+                    revokedResearch.map((research) => (
+                      <Card key={research.id} className="border-red-200 bg-red-50">
+                        <CardContent className="pt-4">
+                          <div className="space-y-3">
+                            <div className="flex items-center justify-between">
+                              <Badge variant="outline" className="bg-red-100 text-red-700 border-red-300">
+                                Revoked
+                              </Badge>
+                              <div className="text-xs text-gray-500">
+                                Originally by {research.uploadedBy}
+                              </div>
+                            </div>
+                            <h4 className="font-semibold text-red-900">{research.title}</h4>
+                            <p className="text-sm text-red-700">{research.authors} ({research.year})</p>
+                            <div className="flex flex-wrap gap-1">
+                              {research.tags.map((tag) => (
+                                <Badge key={tag} variant="secondary" className="text-xs bg-red-100 text-red-800">
+                                  {tag}
+                                </Badge>
+                              ))}
+                            </div>
+                            {research.notes && (
+                              <p className="text-sm text-red-600 bg-red-100 p-2 rounded">
+                                <strong>Notes:</strong> {research.notes}
+                              </p>
+                            )}
+                            <div className="text-xs text-red-600 italic">
+                              ⚠️ This study has been revoked and no longer influences dosing recommendations
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))
+                  )}
+                </div>
+              </TabsContent>
+            )}
+        </Tabs>
         </CardContent>
       </Card>
     </div>
