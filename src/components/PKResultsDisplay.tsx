@@ -2,6 +2,9 @@
 import React from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Info } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
 import { PKResult } from '../types';
 
@@ -35,7 +38,25 @@ export const PKResultsDisplay: React.FC<PKResultsDisplayProps> = ({ results, mic
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Total Clearance</CardTitle>
+            <div className="flex items-center gap-2">
+              <CardTitle className="text-sm font-medium">Total Clearance</CardTitle>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="ghost" size="sm" className="h-auto p-1">
+                    <Info className="h-3 w-3 text-muted-foreground" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-80">
+                  <div className="space-y-2">
+                    <h4 className="font-medium">Total Clearance</h4>
+                    <p className="text-sm text-muted-foreground">
+                      The sum of renal clearance, hepatic clearance, and CRRT clearance. 
+                      Higher values indicate faster drug elimination from the body.
+                    </p>
+                  </div>
+                </PopoverContent>
+              </Popover>
+            </div>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-green-600">
@@ -46,7 +67,25 @@ export const PKResultsDisplay: React.FC<PKResultsDisplayProps> = ({ results, mic
 
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">AUC₀₋₂₄</CardTitle>
+            <div className="flex items-center gap-2">
+              <CardTitle className="text-sm font-medium">AUC₀₋₂₄</CardTitle>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="ghost" size="sm" className="h-auto p-1">
+                    <Info className="h-3 w-3 text-muted-foreground" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-80">
+                  <div className="space-y-2">
+                    <h4 className="font-medium">Area Under the Curve (0-24h)</h4>
+                    <p className="text-sm text-muted-foreground">
+                      Total drug exposure over 24 hours. Higher AUC values indicate 
+                      greater drug exposure, which correlates with efficacy for many antibiotics.
+                    </p>
+                  </div>
+                </PopoverContent>
+              </Popover>
+            </div>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-blue-600">
@@ -57,7 +96,25 @@ export const PKResultsDisplay: React.FC<PKResultsDisplayProps> = ({ results, mic
 
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">MIC</CardTitle>
+            <div className="flex items-center gap-2">
+              <CardTitle className="text-sm font-medium">MIC</CardTitle>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="ghost" size="sm" className="h-auto p-1">
+                    <Info className="h-3 w-3 text-muted-foreground" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-80">
+                  <div className="space-y-2">
+                    <h4 className="font-medium">Minimum Inhibitory Concentration</h4>
+                    <p className="text-sm text-muted-foreground">
+                      The lowest concentration of antibiotic that inhibits bacterial growth. 
+                      Lower MIC values indicate higher bacterial susceptibility to the antibiotic.
+                    </p>
+                  </div>
+                </PopoverContent>
+              </Popover>
+            </div>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-gray-600">
@@ -68,7 +125,25 @@ export const PKResultsDisplay: React.FC<PKResultsDisplayProps> = ({ results, mic
 
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">%T &gt; MIC</CardTitle>
+            <div className="flex items-center gap-2">
+              <CardTitle className="text-sm font-medium">%T &gt; MIC</CardTitle>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="ghost" size="sm" className="h-auto p-1">
+                    <Info className="h-3 w-3 text-muted-foreground" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-80">
+                  <div className="space-y-2">
+                    <h4 className="font-medium">Percent Time Above MIC</h4>
+                    <p className="text-sm text-muted-foreground">
+                      The percentage of time that drug concentration remains above the MIC. 
+                      For beta-lactams like meropenem, target is typically ≥40% for efficacy.
+                    </p>
+                  </div>
+                </PopoverContent>
+              </Popover>
+            </div>
           </CardHeader>
           <CardContent>
             <div className="flex items-center space-x-2">

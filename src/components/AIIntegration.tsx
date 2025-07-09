@@ -85,56 +85,70 @@ export const AIIntegration: React.FC<AIIntegrationProps> = ({
       // Mock verification process and prioritized study selection
       const mockSummary = `# Clinical Summary - Study Verified
 
-Generated using **${selectedModelName}**
+**Generated using ${selectedModelName}**
 
-## High Confidence Recommendation
+---
 
-Verified platform studies + external validation
+## ✅ High Confidence Recommendation
+
+**Verified platform studies + external validation**
 
 The recommended dosing of **${patientInput.antibioticName}** at **${pkResults.doseRecommendation}** is based on verified, prioritized evidence:
 
-## Platform Studies (Priority Sources)
+---
 
-**Smith et al. (2023)** - Pharmacokinetics of vancomycin during CRRT
+## 📚 Platform Studies (Priority Sources)
 
-- **Status**: Verified platform study, peer-reviewed  
+### Smith et al. (2023) - Pharmacokinetics of vancomycin during CRRT
+- **Status**: ✅ Verified platform study, peer-reviewed
 - **Key finding**: Total clearance adjustment formula validated
 
-**Brown et al. (2023)** - Meropenem dosing optimization in CRRT patients
-
-- **Status**: Verified platform study, under review
+### Brown et al. (2023) - Meropenem dosing optimization in CRRT patients  
+- **Status**: ✅ Verified platform study, under review
 - **Key finding**: Extended infusion protocols
 
-## External Validation (Cross-Referenced)
+---
 
-**Newer Study Found**: Johnson et al. (2024) - Updated CRRT pharmacokinetics guidelines
+## ⚠️ External Validation (Cross-Referenced)
 
-- Published 3 months after our platform studies
-- **Recommendation**: Review and consider uploading to platform  
-- May contain updated clearance calculations
+### 🚨 ACTION REQUIRED: Newer Study Found
 
-## Pharmacokinetic Analysis (Platform-Verified)
+**Johnson et al. (2024) - Updated CRRT pharmacokinetics guidelines**
+- **Published**: 3 months after our platform studies
+- **⚠️ RECOMMENDATION**: Review and consider uploading to platform
+- **Potential Impact**: May contain updated clearance calculations
+
+---
+
+## 🔬 Pharmacokinetic Analysis (Platform-Verified)
 
 - **Total clearance**: ${pkResults.totalClearance.toFixed(1)} L/h (validated against Smith 2023)
-- **CRRT impact**: Confirmed with platform research on ${patientInput.crrtModality || 'CRRT'}
+- **CRRT impact**: Confirmed with platform research on ${patientInput.crrtModality || 'CRRT'}  
 - **Target attainment**: ${patientInput.mic ? `%T>MIC of ${pkResults.percentTimeAboveMic.toFixed(1)}% meets therapeutic targets per platform studies` : 'MIC-based optimization requires organism data'}
 
-## Clinical Considerations (Evidence-Based)
+---
 
-${patientInput.liverDisease ? '- **Liver disease**: Reduce hepatic clearance by 50% (Brown et al. platform study)' : ''}
-${patientInput.ecmoTreatment ? '- **ECMO**: Increase Vd, loading dose recommended (Smith et al. platform study)' : ''}
-${patientInput.heartFailure ? '- **Heart failure**: Monitor distribution changes (external validation needed)' : ''}
+## 🏥 Clinical Considerations (Evidence-Based)
 
-## Study Verification Status
+${patientInput.liverDisease ? '- **Liver disease**: Reduce hepatic clearance by 50% (Brown et al. platform study)\n' : ''}${patientInput.ecmoTreatment ? '- **ECMO**: Increase Vd, loading dose recommended (Smith et al. platform study)\n' : ''}${patientInput.heartFailure ? '- **Heart failure**: Monitor distribution changes (external validation needed)\n' : ''}${!patientInput.liverDisease && !patientInput.ecmoTreatment && !patientInput.heartFailure ? '- Standard patient profile, no special considerations identified' : ''}
 
-- **Platform studies**: Verified and prioritized
-- **External studies**: Authenticated but newer version available  
-- **Action**: Consider uploading Johnson et al. (2024) for platform integration
+---
 
-**Confidence Level**: High (platform studies + external validation)
+## 📋 Study Verification Status
 
-**AI Model**: ${selectedModelName}
-      `;
+| Source | Status | Action |
+|--------|--------|--------|
+| Platform studies | ✅ Verified and prioritized | None |
+| External studies | ⚠️ Authenticated but newer version available | Review required |
+| **Next Steps** | **🔍 Consider uploading Johnson et al. (2024) for platform integration** | **HIGH PRIORITY** |
+
+---
+
+## 📊 Summary
+
+- **Confidence Level**: High (platform studies + external validation)
+- **AI Model**: ${selectedModelName}
+- **Action Required**: Yes - Review newer study`;
       
       onSummaryGenerated(mockSummary);
       toast.success(`AI summary generated using ${selectedModelName}`);
