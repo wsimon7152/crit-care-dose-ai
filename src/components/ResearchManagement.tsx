@@ -18,8 +18,8 @@ export const ResearchManagement = () => {
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
 
-  // Mock research data
-  const [researchList] = useState<Research[]>([
+  // Mock research data - now mutable to allow new submissions
+  const [researchList, setResearchList] = useState<Research[]>([
     {
       id: '1',
       title: 'Pharmacokinetics of vancomycin during continuous renal replacement therapy',
@@ -65,8 +65,26 @@ export const ResearchManagement = () => {
 
     setIsUploading(true);
     
-    // Mock upload process
+    // Create new research entry
+    const newResearch: Research = {
+      id: Date.now().toString(),
+      title: uploadFile ? uploadFile.name.replace('.pdf', '') : 'Study from URL',
+      authors: 'Submitted by user', // Would normally be extracted from PDF/URL
+      year: new Date().getFullYear(),
+      url: uploadUrl || undefined,
+      pdfPath: uploadFile ? `/uploads/${uploadFile.name}` : undefined,
+      status: 'pending',
+      uploadedBy: user?.email || 'unknown',
+      uploadedAt: new Date(),
+      tags: ['user-submitted'],
+      notes: uploadNote || undefined
+    };
+
+    // Mock upload process with actual data persistence
     setTimeout(() => {
+      // Add the new research to the list
+      setResearchList(prev => [...prev, newResearch]);
+      
       if (uploadFile) {
         toast.success(`PDF "${uploadFile.name}" uploaded for admin review`);
       } else {
@@ -84,6 +102,7 @@ export const ResearchManagement = () => {
 
   const approvedResearch = researchList.filter(r => r.status === 'approved');
   const pendingResearch = researchList.filter(r => r.status === 'pending');
+  const userPendingResearch = researchList.filter(r => r.status === 'pending' && r.uploadedBy === user?.email);
 
   return (
     <div className="space-y-6">
@@ -96,11 +115,14 @@ export const ResearchManagement = () => {
         </CardHeader>
         <CardContent>
           <Tabs defaultValue="upload" className="w-full">
-            <TabsList className="grid w-full grid-cols-3">
+            <TabsList className={`grid w-full ${user?.role === 'admin' ? 'grid-cols-4' : 'grid-cols-3'}`}>
               <TabsTrigger value="upload">Upload Research</TabsTrigger>
               <TabsTrigger value="approved">Approved ({approvedResearch.length})</TabsTrigger>
+              {user?.role !== 'admin' && (
+                <TabsTrigger value="my-pending">My Pending ({userPendingResearch.length})</TabsTrigger>
+              )}
               {user?.role === 'admin' && (
-                <TabsTrigger value="pending">Pending Review ({pendingResearch.length})</TabsTrigger>
+                <TabsTrigger value="pending">Admin Review ({pendingResearch.length})</TabsTrigger>
               )}
             </TabsList>
             
@@ -197,6 +219,53 @@ export const ResearchManagement = () => {
                 ))}
               </div>
             </TabsContent>
+            
+            {user?.role !== 'admin' && (
+              <TabsContent value="my-pending">
+                <div className="space-y-4">
+                  {userPendingResearch.length === 0 ? (
+                    <div className="text-center py-8 text-gray-500">
+                      <p>No pending submissions</p>
+                      <p className="text-sm">Studies you submit will appear here while awaiting admin review</p>
+                    </div>
+                  ) : (
+                    userPendingResearch.map((research) => (
+                      <Card key={research.id}>
+                        <CardContent className="pt-4">
+                          <div className="space-y-3">
+                            <div className="flex items-center justify-between">
+                              <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">
+                                Awaiting Review
+                              </Badge>
+                              <div className="text-xs text-gray-500">
+                                Submitted {research.uploadedAt.toLocaleDateString()}
+                              </div>
+                            </div>
+                            <h4 className="font-semibold">{research.title}</h4>
+                            <div className="flex items-center space-x-4">
+                              {research.url && (
+                                <span className="text-xs text-blue-600">URL provided</span>
+                              )}
+                              {research.pdfPath && (
+                                <span className="text-xs text-green-600 flex items-center">
+                                  <Upload className="h-3 w-3 mr-1" />
+                                  PDF uploaded
+                                </span>
+                              )}
+                            </div>
+                            {research.notes && (
+                              <p className="text-sm text-gray-700 bg-gray-50 p-2 rounded">
+                                <strong>Your notes:</strong> {research.notes}
+                              </p>
+                            )}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))
+                  )}
+                </div>
+              </TabsContent>
+            )}
             
             {user?.role === 'admin' && (
               <TabsContent value="pending">
