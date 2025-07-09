@@ -402,38 +402,36 @@ export const ResearchManagement = () => {
                         <div className="flex items-start justify-between">
                           <div className="flex-1">
                             <h4 className="font-semibold">{research.title}</h4>
-                            {/* Show re-analyze option for studies that might need it */}
-                            {(research.filename || research.title.includes('.') || research.authors === 'Unknown authors') && (
-                              <div className="flex items-center gap-2 mt-1">
-                                <Badge variant="outline" className="text-xs bg-yellow-100 text-yellow-700">
-                                  {research.filename && research.title === research.filename.replace('.pdf', '') 
-                                    ? 'Filename-based title' 
-                                    : 'May need re-analysis'}
-                                </Badge>
-                                {userApiKeys.length > 0 && (
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => handleReanalyzeStudy(research.id)}
-                                    disabled={isUploading || !selectedApiKey}
-                                    className="text-xs h-6 px-2"
-                                    title={!selectedApiKey ? "Select an API key above first" : "Re-analyze this study"}
-                                  >
-                                    {isUploading ? (
-                                      <RefreshCw className="h-3 w-3 animate-spin" />
-                                    ) : (
-                                      <>
-                                        <Brain className="h-3 w-3 mr-1" />
-                                        Re-analyze
-                                      </>
-                                    )}
-                                  </Button>
-                                )}
-                                {userApiKeys.length === 0 && (
-                                  <span className="text-xs text-gray-500">
-                                    Add API key to enable re-analysis
+                            {/* Always show re-analyze option when API keys are available */}
+                            {userApiKeys.length > 0 && (
+                              <div className="flex items-center gap-2 mt-2">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleReanalyzeStudy(research.id)}
+                                  disabled={isUploading || !selectedApiKey}
+                                  className="text-xs h-7 px-3"
+                                  title={!selectedApiKey ? "Select an API key above first" : "Re-analyze this study with AI"}
+                                >
+                                  {isUploading ? (
+                                    <RefreshCw className="h-3 w-3 animate-spin mr-1" />
+                                  ) : (
+                                    <Brain className="h-3 w-3 mr-1" />
+                                  )}
+                                  {isUploading ? 'Analyzing...' : 'Re-analyze with AI'}
+                                </Button>
+                                {!selectedApiKey && (
+                                  <span className="text-xs text-amber-600">
+                                    ← Select API key above
                                   </span>
                                 )}
+                              </div>
+                            )}
+                            {userApiKeys.length === 0 && (
+                              <div className="mt-2">
+                                <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
+                                  Add API key in settings to enable AI re-analysis
+                                </span>
                               </div>
                             )}
                           </div>
