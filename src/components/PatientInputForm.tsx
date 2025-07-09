@@ -6,6 +6,8 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Info } from 'lucide-react';
 import { PatientInput } from '../types';
 import { drugProfiles } from '../data/drugProfiles';
 
@@ -78,7 +80,35 @@ export const PatientInputForm: React.FC<PatientInputFormProps> = ({ onSubmit, is
 
             {/* CRRT Parameters */}
             <div className="space-y-2">
-              <Label htmlFor="crrtModality">CRRT Modality</Label>
+              <div className="flex items-center gap-2">
+                <Label htmlFor="crrtModality">CRRT Modality</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="ghost" size="sm" className="h-auto p-1">
+                      <Info className="h-4 w-4 text-muted-foreground" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-80">
+                    <div className="space-y-3">
+                      <h4 className="font-medium">CRRT Modalities</h4>
+                      <div className="space-y-2 text-sm">
+                        <div>
+                          <strong>CVVH</strong> - Continuous Venovenous Hemofiltration
+                          <p className="text-muted-foreground">Pure convection, replacement fluid only</p>
+                        </div>
+                        <div>
+                          <strong>CVVHD</strong> - Continuous Venovenous Hemodialysis  
+                          <p className="text-muted-foreground">Pure diffusion, dialysate fluid only</p>
+                        </div>
+                        <div>
+                          <strong>CVVHDF</strong> - Continuous Venovenous Hemodiafiltration
+                          <p className="text-muted-foreground">Combined convection + diffusion, both replacement and dialysate fluids</p>
+                        </div>
+                      </div>
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              </div>
               <Select value={input.crrtModality || ''} onValueChange={(value: 'CVVH' | 'CVVHD' | 'CVVHDF') => setInput(prev => ({ ...prev, crrtModality: value }))}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select modality" />
@@ -96,6 +126,7 @@ export const PatientInputForm: React.FC<PatientInputFormProps> = ({ onSubmit, is
               <Input
                 id="bloodFlow"
                 type="number"
+                placeholder="150-200 (typical for elderly)"
                 value={input.bloodFlowRate || ''}
                 onChange={(e) => setInput(prev => ({ ...prev, bloodFlowRate: Number(e.target.value) || undefined }))}
               />
@@ -143,6 +174,7 @@ export const PatientInputForm: React.FC<PatientInputFormProps> = ({ onSubmit, is
               <Input
                 id="ufRate"
                 type="number"
+                placeholder="100-200 (typical for elderly)"
                 value={input.ultrafiltrationRate || ''}
                 onChange={(e) => setInput(prev => ({ ...prev, ultrafiltrationRate: Number(e.target.value) || undefined }))}
               />
@@ -171,6 +203,7 @@ export const PatientInputForm: React.FC<PatientInputFormProps> = ({ onSubmit, is
                 id="mic"
                 type="number"
                 step="0.1"
+                placeholder="4-8 (typical breakpoint)"
                 value={input.mic || ''}
                 onChange={(e) => setInput(prev => ({ ...prev, mic: Number(e.target.value) || undefined }))}
               />
