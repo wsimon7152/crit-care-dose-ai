@@ -18,33 +18,49 @@ export const ResearchManagement = () => {
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
 
-  // Mock research data - now mutable to allow new submissions
-  const [researchList, setResearchList] = useState<Research[]>([
-    {
-      id: '1',
-      title: 'Pharmacokinetics of vancomycin during continuous renal replacement therapy',
-      authors: 'Smith AB, Johnson CD, Williams EF',
-      year: 2023,
-      url: 'https://pubmed.ncbi.nlm.nih.gov/example1',
-      status: 'approved',
-      uploadedBy: 'admin@hospital.com',
-      uploadedAt: new Date('2023-12-01'),
-      tags: ['vancomycin', 'CRRT', 'PK study'],
-      notes: 'Key study for vancomycin dosing in CVVHDF'
-    },
-    {
-      id: '2',
-      title: 'Meropenem dosing optimization in critically ill patients receiving CRRT',
-      authors: 'Brown GH, Davis IJ, Taylor KL',
-      year: 2023,
-      url: 'https://pubmed.ncbi.nlm.nih.gov/example2',
-      status: 'pending',
-      uploadedBy: 'doctor@hospital.com',
-      uploadedAt: new Date('2023-12-15'),
-      tags: ['meropenem', 'dosing', 'critical care'],
-      notes: 'Proposes extended infusion strategy'
+  // Initialize research data from localStorage or default mock data
+  const [researchList, setResearchList] = useState<Research[]>(() => {
+    const saved = localStorage.getItem('researchList');
+    if (saved) {
+      return JSON.parse(saved).map((item: any) => ({
+        ...item,
+        uploadedAt: new Date(item.uploadedAt)
+      }));
     }
-  ]);
+    
+    // Default mock data
+    return [
+      {
+        id: '1',
+        title: 'Pharmacokinetics of vancomycin during continuous renal replacement therapy',
+        authors: 'Smith AB, Johnson CD, Williams EF',
+        year: 2023,
+        url: 'https://pubmed.ncbi.nlm.nih.gov/example1',
+        status: 'approved',
+        uploadedBy: 'admin@hospital.com',
+        uploadedAt: new Date('2023-12-01'),
+        tags: ['vancomycin', 'CRRT', 'PK study'],
+        notes: 'Key study for vancomycin dosing in CVVHDF'
+      },
+      {
+        id: '2',
+        title: 'Meropenem dosing optimization in critically ill patients receiving CRRT',
+        authors: 'Brown GH, Davis IJ, Taylor KL',
+        year: 2023,
+        url: 'https://pubmed.ncbi.nlm.nih.gov/example2',
+        status: 'pending',
+        uploadedBy: 'doctor@hospital.com',
+        uploadedAt: new Date('2023-12-15'),
+        tags: ['meropenem', 'dosing', 'critical care'],
+        notes: 'Proposes extended infusion strategy'
+      }
+    ];
+  });
+
+  // Save to localStorage whenever researchList changes
+  React.useEffect(() => {
+    localStorage.setItem('researchList', JSON.stringify(researchList));
+  }, [researchList]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -299,10 +315,30 @@ export const ResearchManagement = () => {
                             </p>
                           )}
                           <div className="flex gap-2">
-                            <Button size="sm" className="bg-green-600 hover:bg-green-700">
+                            <Button 
+                              size="sm" 
+                              className="bg-green-600 hover:bg-green-700"
+                              onClick={() => {
+                                setResearchList(prev => 
+                                  prev.map(r => 
+                                    r.id === research.id 
+                                      ? { ...r, status: 'approved' as const }
+                                      : r
+                                  )
+                                );
+                                toast.success('Research approved');
+                              }}
+                            >
                               Approve
                             </Button>
-                            <Button size="sm" variant="outline">
+                            <Button 
+                              size="sm" 
+                              variant="outline"
+                              onClick={() => {
+                                setResearchList(prev => prev.filter(r => r.id !== research.id));
+                                toast.success('Research rejected and removed');
+                              }}
+                            >
                               Reject
                             </Button>
                           </div>
