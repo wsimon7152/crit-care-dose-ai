@@ -373,11 +373,11 @@ export const ResearchManagement = () => {
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-2">
                       <Brain className="h-4 w-4 text-green-600" />
-                      <Label className="text-sm font-medium">Re-analyze existing studies:</Label>
+                      <Label className="text-sm font-medium">Select API key to enable re-analysis:</Label>
                     </div>
                     <Select value={selectedApiKey} onValueChange={setSelectedApiKey}>
                       <SelectTrigger className="w-48">
-                        <SelectValue placeholder="Select API key" />
+                        <SelectValue placeholder="Select API key for re-analysis" />
                       </SelectTrigger>
                       <SelectContent>
                         {userApiKeys.map((apiKey) => (
@@ -389,7 +389,7 @@ export const ResearchManagement = () => {
                     </Select>
                   </div>
                   <p className="text-xs text-green-600 mt-1">
-                    Extract proper titles from existing studies with filenames
+                    Extract proper titles and metadata from existing studies
                   </p>
                 </div>
               )}
@@ -402,18 +402,22 @@ export const ResearchManagement = () => {
                         <div className="flex items-start justify-between">
                           <div className="flex-1">
                             <h4 className="font-semibold">{research.title}</h4>
-                            {research.filename && research.title === research.filename.replace('.pdf', '') && (
+                            {/* Show re-analyze option for studies that might need it */}
+                            {(research.filename || research.title.includes('.') || research.authors === 'Unknown authors') && (
                               <div className="flex items-center gap-2 mt-1">
                                 <Badge variant="outline" className="text-xs bg-yellow-100 text-yellow-700">
-                                  Filename-based title
+                                  {research.filename && research.title === research.filename.replace('.pdf', '') 
+                                    ? 'Filename-based title' 
+                                    : 'May need re-analysis'}
                                 </Badge>
-                                {userApiKeys.length > 0 && selectedApiKey && (
+                                {userApiKeys.length > 0 && (
                                   <Button
                                     size="sm"
                                     variant="outline"
                                     onClick={() => handleReanalyzeStudy(research.id)}
-                                    disabled={isUploading}
+                                    disabled={isUploading || !selectedApiKey}
                                     className="text-xs h-6 px-2"
+                                    title={!selectedApiKey ? "Select an API key above first" : "Re-analyze this study"}
                                   >
                                     {isUploading ? (
                                       <RefreshCw className="h-3 w-3 animate-spin" />
@@ -424,6 +428,11 @@ export const ResearchManagement = () => {
                                       </>
                                     )}
                                   </Button>
+                                )}
+                                {userApiKeys.length === 0 && (
+                                  <span className="text-xs text-gray-500">
+                                    Add API key to enable re-analysis
+                                  </span>
                                 )}
                               </div>
                             )}
