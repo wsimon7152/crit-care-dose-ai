@@ -7,7 +7,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Upload, Brain, RefreshCw, XCircle } from 'lucide-react';
+import { Upload, Brain, RefreshCw, XCircle, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Research } from '../types';
 import { useAuth } from '../contexts/AuthContext';
@@ -175,6 +175,15 @@ export const ResearchManagement = () => {
     toast.success(`"${studyTitle}" has been revoked - calculations will update automatically`);
   };
 
+  // Function to clear all studies and revert to standard therapies
+  const handleClearAllStudies = () => {
+    if (window.confirm('This will remove ALL studies and revert to standard therapy calculations. Are you sure?')) {
+      setResearchList([]);
+      localStorage.removeItem('researchList');
+      toast.success('All studies cleared - reverted to standard therapy calculations');
+    }
+  };
+
   // Function to re-analyze an existing study
   const handleReanalyzeStudy = async (studyId: string) => {
     if (!selectedApiKey) {
@@ -248,7 +257,7 @@ export const ResearchManagement = () => {
         </CardHeader>
         <CardContent>
           <Tabs defaultValue="upload" className="w-full">
-            <TabsList className={`grid w-full ${user?.role === 'admin' ? 'grid-cols-5' : 'grid-cols-3'}`}>
+            <TabsList className={`grid w-full ${user?.role === 'admin' ? 'grid-cols-6' : 'grid-cols-3'}`}>
               <TabsTrigger value="upload">Upload Research</TabsTrigger>
               <TabsTrigger value="approved">Approved ({approvedResearch.length})</TabsTrigger>
               {user?.role !== 'admin' && (
@@ -258,6 +267,7 @@ export const ResearchManagement = () => {
                 <>
                   <TabsTrigger value="pending">Admin Review ({pendingResearch.length})</TabsTrigger>
                   <TabsTrigger value="revoked">Revoked ({revokedResearch.length})</TabsTrigger>
+                  <TabsTrigger value="admin-controls">Admin Controls</TabsTrigger>
                 </>
               )}
             </TabsList>
@@ -639,6 +649,47 @@ export const ResearchManagement = () => {
                       </Card>
                     ))
                   )}
+                </div>
+              </TabsContent>
+            )}
+
+            {user?.role === 'admin' && (
+              <TabsContent value="admin-controls">
+                <div className="space-y-6">
+                  <Card className="border-amber-200 bg-amber-50">
+                    <CardHeader>
+                      <CardTitle className="text-amber-800 flex items-center">
+                        <Trash2 className="h-5 w-5 mr-2" />
+                        System Reset
+                      </CardTitle>
+                      <CardDescription className="text-amber-700">
+                        Clear all research studies and revert to standard therapy calculations
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-4">
+                        <div className="p-4 border border-amber-300 rounded-lg bg-amber-100">
+                          <h4 className="font-semibold text-amber-800 mb-2">About the default studies:</h4>
+                          <p className="text-sm text-amber-700 mb-2">
+                            The first 2 studies shown are example/mock data with non-functional links. 
+                            They were included as sample data to demonstrate the system.
+                          </p>
+                          <p className="text-sm text-amber-700">
+                            Use this reset function to remove all studies (including examples) and start fresh 
+                            with standard pharmacokinetic calculations only.
+                          </p>
+                        </div>
+                        <Button
+                          variant="destructive"
+                          onClick={handleClearAllStudies}
+                          className="w-full"
+                        >
+                          <Trash2 className="h-4 w-4 mr-2" />
+                          Clear All Studies & Reset to Standard Therapies
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
                 </div>
               </TabsContent>
             )}
