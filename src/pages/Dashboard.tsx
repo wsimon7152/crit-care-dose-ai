@@ -74,7 +74,7 @@ export const Dashboard = () => {
                 {aiSummary && (
                   <Card>
                     <CardContent className="pt-6">
-                      <div className="prose prose-sm max-w-none prose-headings:text-foreground prose-p:text-foreground prose-strong:text-foreground prose-li:text-foreground">
+                      <div className="prose prose-sm max-w-none prose-headings:text-foreground prose-p:text-foreground prose-strong:text-foreground prose-li:text-foreground prose-headings:mt-6 prose-headings:mb-4 prose-p:mb-4 prose-ul:mb-4 prose-li:mb-2">
                         <ReactMarkdown>{aiSummary}</ReactMarkdown>
                       </div>
                     </CardContent>

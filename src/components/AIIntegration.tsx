@@ -88,6 +88,7 @@ export const AIIntegration: React.FC<AIIntegrationProps> = ({
 Generated using **${selectedModelName}**
 
 ## High Confidence Recommendation
+
 Verified platform studies + external validation
 
 The recommended dosing of **${patientInput.antibioticName}** at **${pkResults.doseRecommendation}** is based on verified, prioritized evidence:
@@ -95,16 +96,19 @@ The recommended dosing of **${patientInput.antibioticName}** at **${pkResults.do
 ## Platform Studies (Priority Sources)
 
 **Smith et al. (2023)** - Pharmacokinetics of vancomycin during CRRT
-- ✅ Verified: Platform study, peer-reviewed  
-- Key finding: Total clearance adjustment formula validated
+
+- **Status**: Verified platform study, peer-reviewed  
+- **Key finding**: Total clearance adjustment formula validated
 
 **Brown et al. (2023)** - Meropenem dosing optimization in CRRT patients
-- ✅ Verified: Platform study, under review
-- Key finding: Extended infusion protocols
+
+- **Status**: Verified platform study, under review
+- **Key finding**: Extended infusion protocols
 
 ## External Validation (Cross-Referenced)
 
-⚠️ **Newer Study Found**: Johnson et al. (2024) - Updated CRRT pharmacokinetics guidelines
+**Newer Study Found**: Johnson et al. (2024) - Updated CRRT pharmacokinetics guidelines
+
 - Published 3 months after our platform studies
 - **Recommendation**: Review and consider uploading to platform  
 - May contain updated clearance calculations
@@ -123,11 +127,12 @@ ${patientInput.heartFailure ? '- **Heart failure**: Monitor distribution changes
 
 ## Study Verification Status
 
-- ✅ **Platform studies**: Verified and prioritized
-- ⚠️ **External studies**: Authenticated but newer version available  
-- 📋 **Action**: Consider uploading Johnson et al. (2024) for platform integration
+- **Platform studies**: Verified and prioritized
+- **External studies**: Authenticated but newer version available  
+- **Action**: Consider uploading Johnson et al. (2024) for platform integration
 
-**Confidence Level**: High (platform studies + external validation)  
+**Confidence Level**: High (platform studies + external validation)
+
 **AI Model**: ${selectedModelName}
       `;
       
