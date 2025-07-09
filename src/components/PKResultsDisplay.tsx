@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Info } from 'lucide-react';
+import { Info, AlertTriangle, CheckCircle, ExternalLink, FileText } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
 import { PKResult } from '../types';
 
@@ -15,8 +15,43 @@ interface PKResultsDisplayProps {
 }
 
 export const PKResultsDisplay: React.FC<PKResultsDisplayProps> = ({ results, mic, antibioticName }) => {
+  const { evidenceAlerts = [], supportingStudies = [], citationText } = results;
+
   return (
     <div className="space-y-6">
+      {/* Evidence Alerts Section */}
+      {evidenceAlerts.length > 0 && (
+        <Card className="border-blue-200 bg-blue-50">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg flex items-center gap-2">
+              <CheckCircle className="h-5 w-5 text-blue-600" />
+              Evidence-Based Alerts
+            </CardTitle>
+            <CardDescription>
+              Real-time alerts based on approved platform research
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {evidenceAlerts.map((alert, index) => (
+                <div 
+                  key={index}
+                  className={`p-3 rounded-lg flex items-start gap-2 ${
+                    alert.includes('⚠️') ? 'bg-yellow-100 border border-yellow-300' :
+                    alert.includes('✅') ? 'bg-green-100 border border-green-300' :
+                    'bg-blue-100 border border-blue-300'
+                  }`}
+                >
+                  <div className="flex-1 text-sm font-medium">
+                    {alert}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Dose Recommendation */}
       <Card>
         <CardHeader>
@@ -202,6 +237,82 @@ export const PKResultsDisplay: React.FC<PKResultsDisplayProps> = ({ results, mic
           </div>
         </CardContent>
       </Card>
+
+      {/* Supporting Studies Section */}
+      {supportingStudies.length > 0 && (
+        <Card className="border-green-200 bg-green-50">
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <FileText className="h-5 w-5 text-green-600" />
+              Supporting Research
+            </CardTitle>
+            <CardDescription>
+              Platform studies that informed this recommendation
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {supportingStudies.map((study) => (
+                <div key={study.id} className="bg-white p-4 rounded-lg border border-green-200">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <h4 className="font-semibold text-green-900 mb-1">{study.title}</h4>
+                      <p className="text-sm text-green-700 mb-2">
+                        {study.authors} ({study.year || new Date(study.uploadedAt).getFullYear()})
+                      </p>
+                      <div className="flex flex-wrap gap-1 mb-2">
+                        {study.tags.map((tag) => (
+                          <Badge key={tag} variant="secondary" className="text-xs bg-green-100 text-green-800">
+                            {tag}
+                          </Badge>
+                        ))}
+                      </div>
+                      {study.notes && (
+                        <p className="text-sm text-green-600 italic">{study.notes}</p>
+                      )}
+                    </div>
+                    {study.url && (
+                      <a 
+                        href={study.url} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="ml-4 p-2 text-green-600 hover:text-green-800"
+                      >
+                        <ExternalLink className="h-4 w-4" />
+                      </a>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+            {citationText && (
+              <div className="mt-4 p-3 bg-white rounded-lg border border-green-200">
+                <p className="text-sm text-green-700">
+                  <strong>Citation:</strong> {citationText}
+                </p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* No Studies Available */}
+      {supportingStudies.length === 0 && (
+        <Card className="border-yellow-200 bg-yellow-50">
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-yellow-600" />
+              Research Gap Identified
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-yellow-800">
+              No platform studies found for this drug/CRRT combination. Consider uploading relevant research 
+              to improve evidence-based recommendations for future patients.
+            </p>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 };

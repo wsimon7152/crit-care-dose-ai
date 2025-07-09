@@ -53,6 +53,9 @@ export interface PKResult {
   doseRecommendation: string;
   rationale: string;
   concentrationCurve: Array<{ time: number; concentration: number }>;
+  evidenceAlerts?: string[];
+  supportingStudies?: Research[];
+  citationText?: string;
 }
 
 export interface Research {

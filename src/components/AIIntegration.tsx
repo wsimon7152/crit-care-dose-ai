@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useAuth } from '../contexts/AuthContext';
+import { ResearchIntegrationService } from '../services/researchIntegration';
 import { toast } from 'sonner';
 
 interface AIIntegrationProps {
@@ -61,28 +62,25 @@ export const AIIntegration: React.FC<AIIntegrationProps> = ({
       // Update preferred model
       updatePreferredModel(selectedModel);
 
-      // In a real implementation, this would call the AI API with study verification instructions
-      const studyVerificationPrompt = `
-        You are generating a clinical dosing summary. CRITICAL REQUIREMENTS:
-        
-        1. STUDY VERIFICATION: You MUST verify that all studies referenced are real and accurate
-        2. QUESTION FIRST RESULTS: Always question your initial study selections and verify them again
-        3. PLATFORM PRIORITY: Prioritize studies that have been uploaded to this platform first
-        4. DATE COMPARISON: If newer studies exist outside the platform, mention them and suggest uploading
-        
-        For ${patientInput.antibioticName} dosing in CRRT patients:
-        - First, identify platform studies (uploaded research takes priority)
-        - Then verify external studies are real and recent
-        - Cross-reference study authenticity
-        - Suggest newer studies if found outside platform
-      `;
+      // Generate research-integrated prompt using the new service
+      const researchPrompt = ResearchIntegrationService.generateStudyIntegratedPrompt(
+        patientInput.antibioticName,
+        patientInput,
+        pkResults
+      );
 
-      // Mock AI integration with study verification
+      // Mock AI integration with comprehensive research verification
       await new Promise(resolve => setTimeout(resolve, 3000)); // Simulate longer verification process
       
       const selectedModelName = availableModels.find(m => m.id === selectedModel)?.name || selectedModel;
       
-      // Mock verification process and prioritized study selection
+      // Get research data for the summary
+      const relevantStudies = ResearchIntegrationService.findRelevantStudies(patientInput.antibioticName, patientInput);
+      const evidenceAlerts = ResearchIntegrationService.generateEvidenceAlerts(patientInput.antibioticName, patientInput, pkResults);
+      const citations = ResearchIntegrationService.generateStudyCitations(patientInput.antibioticName, patientInput);
+      const studyUpdates = ResearchIntegrationService.checkForStudyUpdates(patientInput.antibioticName);
+      
+      // Enhanced mock verification process with real research integration
       const mockSummary = `# Clinical Summary - Study Verified
 
 **Generated using ${selectedModelName}**
@@ -99,13 +97,30 @@ The recommended dosing of **${patientInput.antibioticName}** at **${pkResults.do
 
 ## 📚 Platform Studies (Priority Sources)
 
-### Smith et al. (2023) - Pharmacokinetics of vancomycin during CRRT
-- **Status**: ✅ Verified platform study, peer-reviewed
-- **Key finding**: Total clearance adjustment formula validated
+${relevantStudies.length > 0 ? 
+  relevantStudies.map(study => `### ${study.title}
+- **Status**: ✅ Verified platform study
+- **Authors**: ${study.authors} (${study.year || new Date(study.uploadedAt).getFullYear()})
+- **Key finding**: ${study.notes || 'Clinical guidance for CRRT dosing'}
+- **Tags**: ${study.tags.join(', ')}
+`).join('\n') : 
+'### No Platform Studies Available\n- **Status**: ⚠️ No studies uploaded for this drug/CRRT combination\n- **Recommendation**: Upload relevant research to improve evidence base\n'
+}
 
-### Brown et al. (2023) - Meropenem dosing optimization in CRRT patients  
-- **Status**: ✅ Verified platform study, under review
-- **Key finding**: Extended infusion protocols
+---
+
+## ⚠️ Evidence Alerts
+
+${evidenceAlerts.length > 0 ? evidenceAlerts.map(alert => `- ${alert}`).join('\n') : '- No specific alerts for this combination'}
+
+---
+
+## 🚨 Research Updates Needed
+
+${studyUpdates.hasUpdates ? 
+  studyUpdates.recommendations.map(rec => `- ${rec}`).join('\n') : 
+  '- Research base is current and complete'
+}
 
 ---
 
@@ -122,15 +137,15 @@ The recommended dosing of **${patientInput.antibioticName}** at **${pkResults.do
 
 ## 🔬 Pharmacokinetic Analysis (Platform-Verified)
 
-- **Total clearance**: ${pkResults.totalClearance.toFixed(1)} L/h (validated against Smith 2023)
-- **CRRT impact**: Confirmed with platform research on ${patientInput.crrtModality || 'CRRT'}  
-- **Target attainment**: ${patientInput.mic ? `%T>MIC of ${pkResults.percentTimeAboveMic.toFixed(1)}% meets therapeutic targets per platform studies` : 'MIC-based optimization requires organism data'}
+- **Total clearance**: ${pkResults.totalClearance.toFixed(1)} L/h ${relevantStudies.length > 0 ? `(validated against ${relevantStudies.length} platform study/studies)` : '(no platform validation available)'}
+- **CRRT impact**: ${relevantStudies.length > 0 ? 'Confirmed with platform research' : 'Based on general principles'} on ${patientInput.crrtModality || 'CRRT'}  
+- **Target attainment**: ${patientInput.mic ? `%T>MIC of ${pkResults.percentTimeAboveMic.toFixed(1)}% ${pkResults.percentTimeAboveMic >= 40 ? 'meets' : 'below'} therapeutic targets` : 'MIC-based optimization requires organism data'}
 
 ---
 
 ## 🏥 Clinical Considerations (Evidence-Based)
 
-${patientInput.liverDisease ? '- **Liver disease**: Reduce hepatic clearance by 50% (Brown et al. platform study)\n' : ''}${patientInput.ecmoTreatment ? '- **ECMO**: Increase Vd, loading dose recommended (Smith et al. platform study)\n' : ''}${patientInput.heartFailure ? '- **Heart failure**: Monitor distribution changes (external validation needed)\n' : ''}${!patientInput.liverDisease && !patientInput.ecmoTreatment && !patientInput.heartFailure ? '- Standard patient profile, no special considerations identified' : ''}
+${patientInput.liverDisease ? `- **Liver disease**: Reduce hepatic clearance by 50% ${relevantStudies.some(s => s.notes?.toLowerCase().includes('liver')) ? '(supported by platform studies)' : '(general recommendation)'}\n` : ''}${patientInput.ecmoTreatment ? `- **ECMO**: Increase Vd, loading dose recommended ${relevantStudies.some(s => s.notes?.toLowerCase().includes('ecmo')) ? '(supported by platform studies)' : '(general recommendation)'}\n` : ''}${patientInput.heartFailure ? `- **Heart failure**: Monitor distribution changes ${relevantStudies.some(s => s.notes?.toLowerCase().includes('heart')) ? '(platform guidance available)' : '(external validation needed)'}\n` : ''}${!patientInput.liverDisease && !patientInput.ecmoTreatment && !patientInput.heartFailure ? '- Standard patient profile, no special considerations identified' : ''}
 
 ---
 
@@ -138,17 +153,18 @@ ${patientInput.liverDisease ? '- **Liver disease**: Reduce hepatic clearance by 
 
 | Source | Status | Action |
 |--------|--------|--------|
-| Platform studies | ✅ Verified and prioritized | None |
-| External studies | ⚠️ Authenticated but newer version available | Review required |
-| **Next Steps** | **🔍 Consider uploading Johnson et al. (2024) for platform integration** | **HIGH PRIORITY** |
+| Platform studies | ${relevantStudies.length > 0 ? `✅ ${relevantStudies.length} verified and prioritized` : '⚠️ None available'} | ${relevantStudies.length > 0 ? 'None' : 'Upload relevant research'} |
+| Research gaps | ${studyUpdates.hasUpdates ? '⚠️ Updates needed' : '✅ Current'} | ${studyUpdates.hasUpdates ? 'Review required' : 'None'} |
+| **Evidence level** | **${relevantStudies.length > 0 ? 'HIGH' : 'LOW'} (platform-verified)** | **${relevantStudies.length === 0 ? 'HIGH PRIORITY - UPLOAD STUDIES' : 'Continue monitoring'}** |
 
 ---
 
 ## 📊 Summary
 
-- **Confidence Level**: High (platform studies + external validation)
+- **Confidence Level**: ${relevantStudies.length > 0 ? 'High' : 'Low'} (${relevantStudies.length} platform study/studies + external validation)
 - **AI Model**: ${selectedModelName}
-- **Action Required**: Yes - Review newer study`;
+- **Citations**: ${citations.citationText}
+- **Action Required**: ${studyUpdates.hasUpdates || relevantStudies.length === 0 ? 'Yes' : 'No'} - ${studyUpdates.hasUpdates ? 'Review research updates' : relevantStudies.length === 0 ? 'Upload relevant studies' : 'Continue current protocol'}`;
       
       onSummaryGenerated(mockSummary);
       toast.success(`AI summary generated using ${selectedModelName}`);

@@ -1,6 +1,7 @@
 import { PatientInput, PKParameters, PKResult } from '../types';
 import { drugProfiles } from '../data/drugProfiles';
 import { StudyVerificationService } from './studyVerification';
+import { ResearchIntegrationService } from './researchIntegration';
 
 export class PKCalculationService {
   static calculatePKMetrics(input: PatientInput): PKResult {
@@ -15,7 +16,13 @@ export class PKCalculationService {
       throw new Error(`Drug profile not found for ${input.antibioticName}`);
     }
 
-    const pk = drugProfile.pkParameters;
+    // Adjust PK parameters based on approved research studies
+    const adjustedPK = ResearchIntegrationService.adjustPKParametersFromStudies(
+      drugProfile.pkParameters, 
+      input.antibioticName, 
+      input
+    );
+    const pk = adjustedPK;
     
     // Calculate CRRT clearance based on modality and flow rates
     const crrtClearance = this.calculateCRRTClearance(input, pk);
@@ -46,8 +53,20 @@ export class PKCalculationService {
       pk.interval
     );
     
-    // Generate dosing recommendation with study verification
+    // Generate dosing recommendation with research integration
     const doseRecommendation = this.generateDoseRecommendation(input, drugProfile, percentTimeAboveMic);
+    
+    // Generate evidence alerts and citations
+    const evidenceAlerts = ResearchIntegrationService.generateEvidenceAlerts(
+      input.antibioticName, 
+      input, 
+      { totalClearance, auc024, percentTimeAboveMic } as PKResult
+    );
+    
+    const citations = ResearchIntegrationService.generateStudyCitations(
+      input.antibioticName, 
+      input
+    );
     
     return {
       totalClearance,
@@ -55,7 +74,10 @@ export class PKCalculationService {
       percentTimeAboveMic,
       doseRecommendation: doseRecommendation.dose,
       rationale: doseRecommendation.rationale,
-      concentrationCurve
+      concentrationCurve,
+      evidenceAlerts,
+      supportingStudies: citations.supportingStudies,
+      citationText: citations.citationText
     };
   }
 
@@ -134,38 +156,44 @@ export class PKCalculationService {
 
   private static generateDoseRecommendation(input: PatientInput, drugProfile: any, percentTimeAboveMic: number) {
     let dose = `${drugProfile.pkParameters.standardDose}mg every ${drugProfile.pkParameters.interval} hours`;
-    let rationale = `${drugProfile.dosingSuggestions[0]} (Based on verified platform studies)`;
+    
+    // Get research-based rationale
+    const relevantStudies = ResearchIntegrationService.findRelevantStudies(input.antibioticName, input);
+    let rationale = `${drugProfile.dosingSuggestions[0]}`;
+    
+    if (relevantStudies.length > 0) {
+      rationale += ` (Based on ${relevantStudies.length} verified platform study/studies)`;
+    } else {
+      rationale += ' (Standard guidelines - no platform studies available)';
+    }
     
     // Adjust based on patient factors with study verification note
     if (input.liverDisease) {
-      rationale += '. Liver disease present - dosing adjustment per verified clinical studies.';
+      rationale += '. Liver disease present - dosing adjustment per clinical studies.';
     }
     
     if (input.ecmoTreatment) {
-      rationale += '. ECMO therapy increases Vd - loading dose recommended per platform research.';
+      rationale += '. ECMO therapy increases Vd - loading dose recommended per research.';
     }
     
     if (input.mic && percentTimeAboveMic < 40) {
-      rationale += ` Current %T>MIC is ${percentTimeAboveMic.toFixed(1)}% - consider optimization per verified studies.`;
+      rationale += ` Current %T>MIC is ${percentTimeAboveMic.toFixed(1)}% - consider optimization per available studies.`;
     }
     
     return { dose, rationale };
   }
 
-  static async generateStudyVerifiedSummary(input: PatientInput, pkResults: PKResult, platformStudies: any[]): Promise<string> {
-    // Verify and prioritize studies
-    const verifiedStudies = await StudyVerificationService.verifyAndPrioritizeStudies(
-      input.antibioticName, 
-      platformStudies
+  static async generateStudyVerifiedSummary(input: PatientInput, pkResults: PKResult): Promise<string> {
+    // Generate comprehensive research-integrated prompt
+    const researchPrompt = ResearchIntegrationService.generateStudyIntegratedPrompt(
+      input.antibioticName,
+      input,
+      pkResults
     );
     
-    // Generate study verification prompt for AI
-    const verificationPrompt = StudyVerificationService.generateStudyVerificationPrompt(input.antibioticName);
+    // In production, this would be sent to the AI API
+    console.log('Research-integrated AI prompt:', researchPrompt);
     
-    // This would be sent to the actual AI API in production
-    console.log('Study verification prompt:', verificationPrompt);
-    console.log('Verified studies:', verifiedStudies);
-    
-    return verificationPrompt;
+    return researchPrompt;
   }
 }
