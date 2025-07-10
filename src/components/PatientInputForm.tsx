@@ -161,7 +161,7 @@ export const PatientInputForm: React.FC<PatientInputFormProps> = ({ onSubmit, is
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="preFilter">Pre-filter Replacement (mL/kg/hr) *</Label>
+                  <Label htmlFor="preFilter">Pre-filter Replacement (mL/hr) *</Label>
                   <Input
                     id="preFilter"
                     type="number"
@@ -172,7 +172,7 @@ export const PatientInputForm: React.FC<PatientInputFormProps> = ({ onSubmit, is
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="postFilter">Post-filter Replacement (mL/kg/hr) *</Label>
+                  <Label htmlFor="postFilter">Post-filter Replacement (mL/hr) *</Label>
                   <Input
                     id="postFilter"
                     type="number"
