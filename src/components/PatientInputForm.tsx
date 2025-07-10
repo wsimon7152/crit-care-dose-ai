@@ -22,7 +22,8 @@ export const PatientInputForm: React.FC<PatientInputFormProps> = ({ onSubmit, is
     heartDisease: false,
     heartFailure: false,
     ecmoTreatment: false,
-    antibioticName: ''
+    antibioticName: '',
+    filterType: 'high-flux'
   });
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -205,6 +206,27 @@ export const PatientInputForm: React.FC<PatientInputFormProps> = ({ onSubmit, is
                 value={input.ultrafiltrationRate || ''}
                 onChange={(e) => setInput(prev => ({ ...prev, ultrafiltrationRate: Number(e.target.value) || undefined }))}
               />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="filterType">Filter/Device Type</Label>
+              <Select value={input.filterType || 'high-flux'} onValueChange={(value) => setInput(prev => ({ ...prev, filterType: value }))}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select filter type" />
+                </SelectTrigger>
+                <SelectContent className="bg-popover z-50">
+                  <SelectItem value="high-flux">High-flux (default)</SelectItem>
+                  <SelectItem value="prismax-hf1000">Prismax HF1000</SelectItem>
+                  <SelectItem value="prismax-hf1400">Prismax HF1400</SelectItem>
+                  <SelectItem value="multifiltrate-aev1000">Multifiltrate AEV1000</SelectItem>
+                  <SelectItem value="multifiltrate-aev600">Multifiltrate AEV600</SelectItem>
+                  <SelectItem value="fresenius-hf1000">Fresenius HF1000</SelectItem>
+                  <SelectItem value="fresenius-hf1400">Fresenius HF1400</SelectItem>
+                  <SelectItem value="baxter-st100">Baxter ST100</SelectItem>
+                  <SelectItem value="baxter-st150">Baxter ST150</SelectItem>
+                  <SelectItem value="low-flux">Low-flux</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
             {/* Antibiotic Information */}

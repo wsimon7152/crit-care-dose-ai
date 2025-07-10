@@ -37,6 +37,7 @@ export interface PatientInput {
   sourceOfInfection?: string;
   mic?: number;
   crrtModality?: 'CVVH' | 'CVVHD' | 'CVVHDF';
+  filterType?: string;
 }
 
 export interface PKParameters {
