@@ -412,50 +412,154 @@ export const PKResultsDisplay: React.FC<PKResultsDisplayProps> = ({
               <div>
                 <h3 className="font-semibold text-lg mb-3">Step-by-Step Calculations</h3>
                 <div className="space-y-4">
-                  {/* CRRT Clearance Calculation */}
-                  <div className="bg-green-50 p-4 rounded border border-green-200">
-                    <h4 className="font-medium mb-2">1. CRRT Clearance Adjustment</h4>
+                  
+                  {/* Patient & Drug Parameters */}
+                  <div className="bg-gray-50 p-4 rounded border border-gray-200">
+                    <h4 className="font-medium mb-2">Patient & Drug Parameters Used</h4>
                     <div className="text-sm space-y-1">
-                      <div><strong>Formula:</strong> Adjusted CL_CRRT = Baseline × Flow_multiplier × (1 - Protein_binding)</div>
-                      <div><strong>Flow Multiplier:</strong> Based on blood flow ({patientInput.bloodFlowRate || 150} mL/min) and dialysate flow ({patientInput.dialysateFlowRate || 25} mL/kg/hr)</div>
-                      <div><strong>Free Fraction:</strong> (1 - {pkParameters.proteinBinding}) = {(1 - pkParameters.proteinBinding).toFixed(3)}</div>
-                      <div><strong>Result:</strong> ~{(results.totalClearance * 0.6).toFixed(1)} L/h (estimated CRRT component)</div>
+                      <div><strong>Patient Weight:</strong> {results.calculationDetails?.patientWeight || patientInput.weight || 70} kg {!patientInput.weight ? "(default - weight not specified)" : ""}</div>
+                      <div><strong>Drug:</strong> {antibioticName}</div>
+                      <div><strong>Standard Dose:</strong> {pkParameters.standardDose} mg</div>
+                      <div><strong>Dosing Interval:</strong> {pkParameters.interval} hours</div>
+                      <div><strong>Volume of Distribution:</strong> {pkParameters.volumeOfDistribution} L/kg</div>
+                      <div><strong>Protein Binding:</strong> {(pkParameters.proteinBinding * 100).toFixed(1)}%</div>
+                      <div><strong>Filter Type:</strong> {patientInput.filterType || "high-flux (default)"}</div>
+                      <div><strong>CRRT Modality:</strong> {patientInput.crrtModality || "Not specified"}</div>
                     </div>
                   </div>
 
-                  {/* Total Clearance Calculation */}
+                  {/* Step 1: Volume of Distribution Calculation */}
                   <div className="bg-blue-50 p-4 rounded border border-blue-200">
-                    <h4 className="font-medium mb-2">2. Total Clearance</h4>
+                    <h4 className="font-medium mb-2">1. Volume of Distribution Calculation</h4>
                     <div className="text-sm space-y-1">
-                      <div><strong>Formula:</strong> CL_total = CL_CRRT + CL_hepatic + CL_residual_renal</div>
-                      <div><strong>Hepatic Adjustment:</strong> {patientInput.liverDisease ? '50%' : '80%'} of baseline {patientInput.liverDisease ? '(liver disease)' : '(normal)'}</div>
-                      <div><strong>Result:</strong> {results.totalClearance.toFixed(1)} L/h</div>
+                      <div><strong>Formula:</strong> Vd (L) = Vd (L/kg) × Weight (kg)</div>
+                      <div><strong>Calculation:</strong> {pkParameters.volumeOfDistribution} L/kg × {results.calculationDetails?.patientWeight || 70} kg</div>
+                      <div><strong>Result:</strong> {results.calculationDetails?.volumeOfDistribution?.toFixed(1)} L</div>
+                      <div className="text-xs text-blue-700 italic">This represents the total body space available for drug distribution</div>
                     </div>
                   </div>
 
-                  {/* AUC Calculation */}
+                  {/* Step 2: CRRT Clearance Calculation */}
+                  <div className="bg-green-50 p-4 rounded border border-green-200">
+                    <h4 className="font-medium mb-2">2. CRRT Clearance Calculation</h4>
+                    <div className="text-sm space-y-2">
+                      <div><strong>Baseline CRRT Clearance:</strong> {pkParameters.crrtClearance} L/h</div>
+                      
+                      <div><strong>Flow Rate Multiplier:</strong></div>
+                      <ul className="ml-4 space-y-1">
+                        <li>• Blood Flow: {patientInput.bloodFlowRate || 150} mL/min (baseline: 150 mL/min)</li>
+                        <li>• Dialysate Flow: {patientInput.dialysateFlowRate || 25} mL/kg/hr (baseline: 25 mL/kg/hr)</li>
+                        <li>• <strong>Flow Multiplier:</strong> {results.calculationDetails?.flowMultiplier?.toFixed(3)}</li>
+                      </ul>
+                      
+                      <div><strong>Protein Binding Adjustment:</strong></div>
+                      <ul className="ml-4 space-y-1">
+                        <li>• Free Fraction: (1 - {pkParameters.proteinBinding}) = {(1 - pkParameters.proteinBinding).toFixed(3)}</li>
+                        <li>• Sieving Coefficient: {results.calculationDetails?.sievingCoefficient?.toFixed(3)} ({results.calculationDetails?.filterEfficiency})</li>
+                        <li>• <strong>Protein Binding Adjustment:</strong> {results.calculationDetails?.proteinBindingAdjustment?.toFixed(3)}</li>
+                      </ul>
+                      
+                      <div><strong>Final CRRT Clearance:</strong></div>
+                      <div className="ml-4">
+                        {pkParameters.crrtClearance} × {results.calculationDetails?.flowMultiplier?.toFixed(3)} × {results.calculationDetails?.proteinBindingAdjustment?.toFixed(3)} = <strong>{results.calculationDetails?.crrtClearance?.toFixed(2)} L/h</strong>
+                      </div>
+                      <div className="text-xs text-green-700 italic">CRRT removes drug from blood; efficiency depends on filter type and protein binding</div>
+                    </div>
+                  </div>
+
+                  {/* Step 3: Total Clearance Calculation */}
                   <div className="bg-purple-50 p-4 rounded border border-purple-200">
-                    <h4 className="font-medium mb-2">3. Area Under Curve (AUC₀₋₂₄)</h4>
+                    <h4 className="font-medium mb-2">3. Total Body Clearance</h4>
                     <div className="text-sm space-y-1">
-                      <div><strong>Formula:</strong> AUC = Total_Daily_Dose / CL_total</div>
-                      <div><strong>Daily Dose:</strong> {pkParameters.standardDose} mg × {24 / pkParameters.interval} doses = {pkParameters.standardDose * (24 / pkParameters.interval)} mg</div>
-                      <div><strong>Result:</strong> {results.auc024.toFixed(0)} mg·h/L</div>
+                      <div><strong>Components:</strong></div>
+                      <ul className="ml-4 space-y-1">
+                        <li>• CRRT Clearance: {results.calculationDetails?.crrtClearance?.toFixed(2)} L/h</li>
+                        <li>• Hepatic Clearance: {results.calculationDetails?.hepaticClearance?.toFixed(2)} L/h {patientInput.liverDisease ? "(reduced due to liver disease)" : "(normal hepatic function)"}</li>
+                        <li>• Residual Renal: {results.calculationDetails?.residualRenalClearance?.toFixed(2)} L/h (minimal in CRRT patients)</li>
+                      </ul>
+                      <div><strong>Total Clearance:</strong> {results.calculationDetails?.crrtClearance?.toFixed(2)} + {results.calculationDetails?.hepaticClearance?.toFixed(2)} + {results.calculationDetails?.residualRenalClearance?.toFixed(2)} = <strong>{results.totalClearance.toFixed(2)} L/h</strong></div>
+                      <div className="text-xs text-purple-700 italic">Total rate at which drug is eliminated from the body</div>
                     </div>
                   </div>
 
-                  {/* Time Above MIC Calculation */}
-                  {mic && (
+                  {/* Step 4: Elimination Rate */}
+                  <div className="bg-yellow-50 p-4 rounded border border-yellow-200">
+                    <h4 className="font-medium mb-2">4. Elimination Rate Constant</h4>
+                    <div className="text-sm space-y-1">
+                      <div><strong>Formula:</strong> k_e = Total Clearance / Volume of Distribution</div>
+                      <div><strong>Calculation:</strong> {results.totalClearance.toFixed(2)} L/h ÷ {results.calculationDetails?.volumeOfDistribution?.toFixed(1)} L</div>
+                      <div><strong>Result:</strong> {results.calculationDetails?.eliminationRate?.toFixed(4)} h⁻¹</div>
+                      <div className="text-xs text-yellow-700 italic">Rate constant describing how fast drug concentration declines</div>
+                    </div>
+                  </div>
+
+                  {/* Step 5: Initial Concentration */}
+                  <div className="bg-indigo-50 p-4 rounded border border-indigo-200">
+                    <h4 className="font-medium mb-2">5. Initial Concentration After Dose</h4>
+                    <div className="text-sm space-y-1">
+                      <div><strong>Formula:</strong> C₀ = Dose / Volume of Distribution</div>
+                      <div><strong>Calculation:</strong> {pkParameters.standardDose} mg ÷ {results.calculationDetails?.volumeOfDistribution?.toFixed(1)} L</div>
+                      <div><strong>Result:</strong> {results.calculationDetails?.initialConcentration?.toFixed(2)} mg/L</div>
+                      <div className="text-xs text-indigo-700 italic">Peak concentration immediately after IV dose administration</div>
+                    </div>
+                  </div>
+
+                  {/* Step 6: Daily Dose and AUC */}
+                  <div className="bg-teal-50 p-4 rounded border border-teal-200">
+                    <h4 className="font-medium mb-2">6. Daily Dosing and AUC₀₋₂₄</h4>
+                    <div className="text-sm space-y-1">
+                      <div><strong>Doses per Day:</strong> 24 hours ÷ {pkParameters.interval} hours = {results.calculationDetails?.dosesPerDay?.toFixed(1)} doses</div>
+                      <div><strong>Total Daily Dose:</strong> {pkParameters.standardDose} mg × {results.calculationDetails?.dosesPerDay?.toFixed(1)} = {results.calculationDetails?.dailyDose?.toFixed(0)} mg</div>
+                      <div><strong>AUC₀₋₂₄ Formula:</strong> AUC = Daily Dose / Total Clearance</div>
+                      <div><strong>AUC₀₋₂₄ Calculation:</strong> {results.calculationDetails?.dailyDose?.toFixed(0)} mg ÷ {results.totalClearance.toFixed(2)} L/h</div>
+                      <div><strong>Result:</strong> {results.auc024.toFixed(0)} mg·h/L</div>
+                      <div className="text-xs text-teal-700 italic">Total drug exposure over 24 hours - key efficacy parameter</div>
+                    </div>
+                  </div>
+
+                  {/* Step 7: Time Above MIC */}
+                  {mic && results.calculationDetails?.timeToReachMIC && (
                     <div className="bg-orange-50 p-4 rounded border border-orange-200">
-                      <h4 className="font-medium mb-2">4. Percent Time Above MIC</h4>
+                      <h4 className="font-medium mb-2">7. Percent Time Above MIC (%T&gt;MIC)</h4>
                       <div className="text-sm space-y-1">
-                        <div><strong>Formula:</strong> %T&gt;MIC = (ln(C₀/MIC) / k_e) / dosing_interval × 100</div>
-                        <div><strong>Initial Concentration (C₀):</strong> Dose / (Vd × Weight) = {pkParameters.standardDose} / ({pkParameters.volumeOfDistribution} × {patientInput.weight || 70}) = {(pkParameters.standardDose / (pkParameters.volumeOfDistribution * (patientInput.weight || 70))).toFixed(1)} mg/L</div>
-                        <div><strong>Elimination Rate (k_e):</strong> CL_total / (Vd × Weight) = {(results.totalClearance / (pkParameters.volumeOfDistribution * (patientInput.weight || 70))).toFixed(3)} h⁻¹</div>
-                        <div><strong>MIC:</strong> {mic} mg/L</div>
-                        <div><strong>Result:</strong> {results.percentTimeAboveMic.toFixed(1)}%</div>
+                        <div><strong>MIC Target:</strong> {mic} mg/L</div>
+                        <div><strong>Initial Concentration:</strong> {results.calculationDetails?.initialConcentration?.toFixed(2)} mg/L</div>
+                        <div><strong>Elimination Rate:</strong> {results.calculationDetails?.eliminationRate?.toFixed(4)} h⁻¹</div>
+                        
+                        <div><strong>Time to Reach MIC Formula:</strong> t = ln(C₀/MIC) / k_e</div>
+                        <div><strong>Calculation:</strong> ln({results.calculationDetails?.initialConcentration?.toFixed(2)}/{mic}) ÷ {results.calculationDetails?.eliminationRate?.toFixed(4)}</div>
+                        <div><strong>Time to MIC:</strong> {results.calculationDetails?.timeToReachMIC?.toFixed(2)} hours</div>
+                        
+                        <div><strong>%T&gt;MIC Formula:</strong> (Time to MIC / Dosing Interval) × 100%</div>
+                        <div><strong>Calculation:</strong> ({results.calculationDetails?.timeToReachMIC?.toFixed(2)} ÷ {pkParameters.interval}) × 100%</div>
+                        <div><strong>Result:</strong> {results.percentTimeAboveMic.toFixed(1)}% {results.percentTimeAboveMic >= 40 ? "✅ Target achieved" : "⚠️ Below target (40%)"}</div>
+                        <div className="text-xs text-orange-700 italic">Critical parameter for beta-lactam efficacy - target ≥40% for most infections</div>
                       </div>
                     </div>
                   )}
+
+                  {/* Clinical Interpretation */}
+                  <div className="bg-gray-100 p-4 rounded border border-gray-300">
+                    <h4 className="font-medium mb-2">Clinical Interpretation</h4>
+                    <div className="text-sm space-y-2">
+                      <div><strong>Clearance Assessment:</strong> 
+                        {results.totalClearance > 3 ? " High clearance - may need dose increase" : 
+                         results.totalClearance < 1 ? " Low clearance - consider dose reduction" : " Moderate clearance - standard dosing appropriate"}
+                      </div>
+                      <div><strong>Filter Efficiency:</strong> {results.calculationDetails?.filterEfficiency} for {antibioticName} removal</div>
+                      {mic && (
+                        <div><strong>Efficacy Prediction:</strong> 
+                          {results.percentTimeAboveMic >= 60 ? " Excellent probability of clinical success" :
+                           results.percentTimeAboveMic >= 40 ? " Good probability of clinical success" :
+                           " Consider dose optimization or alternative therapy"}
+                        </div>
+                      )}
+                      <div className="text-xs text-gray-600 italic mt-2">
+                        Note: These calculations are based on population pharmacokinetics. Individual patient response may vary. 
+                        Consider therapeutic drug monitoring when available.
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
 

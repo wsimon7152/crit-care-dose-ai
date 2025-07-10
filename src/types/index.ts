@@ -59,6 +59,22 @@ export interface PKResult {
   evidenceAlerts?: string[];
   supportingStudies?: Research[];
   citationText?: string;
+  calculationDetails?: {
+    patientWeight: number;
+    crrtClearance: number;
+    hepaticClearance: number;
+    residualRenalClearance: number;
+    flowMultiplier: number;
+    proteinBindingAdjustment: number;
+    volumeOfDistribution: number;
+    eliminationRate: number;
+    initialConcentration: number;
+    dailyDose: number;
+    dosesPerDay: number;
+    timeToReachMIC?: number;
+    sievingCoefficient?: number;
+    filterEfficiency?: string;
+  };
 }
 
 export interface Research {

@@ -24,32 +24,44 @@ export class PKCalculationService {
     );
     const pk = adjustedPK;
     
-    // Calculate CRRT clearance based on modality and flow rates
-    const crrtClearance = this.calculateCRRTClearance(input, pk);
+    // Patient weight (use 70kg as default if not provided)
+    const patientWeight = input.weight || 70;
     
-    // Calculate total clearance (renal + CRRT + hepatic)
+    // Calculate CRRT clearance with detailed breakdown
+    const crrtCalculations = this.calculateCRRTClearanceDetailed(input, pk);
+    
+    // Calculate hepatic and renal clearance
     const hepaticClearance = input.liverDisease ? pk.crrtClearance * 0.5 : pk.crrtClearance * 0.8;
-    const totalClearance = crrtClearance + hepaticClearance;
+    const residualRenalClearance = 0.1; // Assume minimal residual renal function in CRRT patients
+    
+    // Calculate total clearance (CRRT + hepatic + residual renal)
+    const totalClearance = crrtCalculations.adjustedClearance + hepaticClearance + residualRenalClearance;
+    
+    // Calculate dosing parameters
+    const dosesPerDay = 24 / pk.interval;
+    const dailyDose = pk.standardDose * dosesPerDay;
     
     // Calculate AUC0-24
-    const dose = pk.standardDose;
-    const dosesPerDay = 24 / pk.interval;
-    const totalDailyDose = dose * dosesPerDay;
-    const auc024 = totalDailyDose / totalClearance;
+    const auc024 = dailyDose / totalClearance;
+    
+    // Calculate volume of distribution and elimination rate
+    const volumeOfDistribution = pk.volumeOfDistribution * patientWeight;
+    const eliminationRate = totalClearance / volumeOfDistribution;
+    const initialConcentration = pk.standardDose / volumeOfDistribution;
     
     // Calculate %T>MIC if MIC is provided
     let percentTimeAboveMic = 0;
-    if (input.mic) {
-      const vd = pk.volumeOfDistribution * (input.weight || 70);
-      const ke = totalClearance / vd;
-      percentTimeAboveMic = this.calculatePercentTimeAboveMIC(dose, vd, ke, input.mic, pk.interval);
+    let timeToReachMIC = undefined;
+    if (input.mic && initialConcentration > input.mic) {
+      timeToReachMIC = Math.log(initialConcentration / input.mic) / eliminationRate;
+      percentTimeAboveMic = Math.min((timeToReachMIC / pk.interval) * 100, 100);
     }
     
     // Generate concentration-time curve
     const concentrationCurve = this.generateConcentrationCurve(
-      dose, 
-      pk.volumeOfDistribution * (input.weight || 70), 
-      totalClearance / (pk.volumeOfDistribution * (input.weight || 70)),
+      pk.standardDose, 
+      volumeOfDistribution, 
+      eliminationRate,
       pk.interval
     );
     
@@ -77,7 +89,23 @@ export class PKCalculationService {
       concentrationCurve,
       evidenceAlerts,
       supportingStudies: citations.supportingStudies,
-      citationText: citations.citationText
+      citationText: citations.citationText,
+      calculationDetails: {
+        patientWeight,
+        crrtClearance: crrtCalculations.adjustedClearance,
+        hepaticClearance,
+        residualRenalClearance,
+        flowMultiplier: crrtCalculations.flowMultiplier,
+        proteinBindingAdjustment: crrtCalculations.proteinBindingAdjustment,
+        volumeOfDistribution,
+        eliminationRate,
+        initialConcentration,
+        dailyDose,
+        dosesPerDay,
+        timeToReachMIC,
+        sievingCoefficient: crrtCalculations.sievingCoefficient,
+        filterEfficiency: crrtCalculations.filterEfficiency
+      }
     };
   }
 
@@ -91,6 +119,52 @@ export class PKCalculationService {
 
     const normalized = drugName.toLowerCase().replace(/[-\s]/g, '');
     return drugNameMappings[normalized] || normalized;
+  }
+
+  private static calculateCRRTClearanceDetailed(input: PatientInput, pk: PKParameters): {
+    adjustedClearance: number;
+    flowMultiplier: number;
+    proteinBindingAdjustment: number;
+    sievingCoefficient: number;
+    filterEfficiency: string;
+  } {
+    const baselineClearance = pk.crrtClearance;
+    
+    // Calculate flow multiplier based on CRRT settings
+    let flowMultiplier = 1;
+    
+    if (input.bloodFlowRate) {
+      flowMultiplier *= Math.min(input.bloodFlowRate / 150, 1.5); // Baseline 150 mL/min
+    }
+    
+    if (input.dialysateFlowRate) {
+      flowMultiplier *= Math.min(input.dialysateFlowRate / 25, 1.3); // Baseline 25 mL/kg/hr
+    }
+    
+    // Calculate protein binding adjustment with filter-specific considerations
+    const proteinBindingAdjustment = this.calculateProteinBindingAdjustment(
+      pk.proteinBinding, 
+      input.filterType || 'high-flux',
+      input.antibioticName
+    );
+    
+    // Get sieving coefficient for detailed reporting
+    const sievingData = this.getSievingCoefficient(input.filterType || 'high-flux', input.antibioticName, pk.proteinBinding);
+    const sievingCoefficient = pk.proteinBinding > 0.8 ? sievingData.highBinding : sievingData.lowBinding;
+    
+    // Determine filter efficiency category
+    const filterEfficiency = sievingCoefficient > 0.9 ? 'High efficiency' : 
+                           sievingCoefficient > 0.7 ? 'Moderate efficiency' : 'Lower efficiency';
+    
+    const adjustedClearance = baselineClearance * flowMultiplier * proteinBindingAdjustment;
+    
+    return {
+      adjustedClearance,
+      flowMultiplier,
+      proteinBindingAdjustment,
+      sievingCoefficient,
+      filterEfficiency
+    };
   }
 
   private static calculateCRRTClearance(input: PatientInput, pk: PKParameters): number {
