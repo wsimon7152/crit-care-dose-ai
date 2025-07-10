@@ -47,22 +47,33 @@ export const AIIntegration: React.FC<AIIntegrationProps> = ({
   const availableModels = selectedKeyData ? MODEL_OPTIONS[selectedKeyData.provider] || [] : [];
 
   const generateSummary = async () => {
+    console.log('Generate Summary clicked - Starting validation...');
+    console.log('Selected API Key:', selectedApiKey);
+    console.log('Selected Model:', selectedModel);
+    console.log('User API Keys:', userApiKeys);
+    console.log('Patient Input:', patientInput);
+    console.log('PK Results:', pkResults);
+    
     if (!selectedApiKey) {
+      console.log('ERROR: No API key selected');
       toast.error('Please select an API key');
       return;
     }
 
     if (!selectedModel) {
+      console.log('ERROR: No model selected');
       toast.error('Please select a model');
       return;
     }
 
     const selectedKeyData = userApiKeys.find(key => key.id === selectedApiKey);
     if (!selectedKeyData) {
+      console.log('ERROR: Selected API key not found in user keys');
       toast.error('Selected API key not found');
       return;
     }
 
+    console.log('All validations passed - starting AI generation...');
     setIsGenerating(true);
     
     try {
