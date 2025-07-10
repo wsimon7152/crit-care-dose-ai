@@ -55,22 +55,19 @@ export const Dashboard = () => {
               value="dosing" 
               className="text-center whitespace-normal leading-tight py-3 px-2 h-auto min-h-[3rem]"
             >
-              <span className="block">Dosing</span>
-              <span className="block">Calculator</span>
+              Dosing Calculator
             </TabsTrigger>
             <TabsTrigger 
               value="research" 
               className="text-center whitespace-normal leading-tight py-3 px-2 h-auto min-h-[3rem]"
             >
-              <span className="block">Research</span>
-              <span className="block">Management</span>
+              Research Management
             </TabsTrigger>
             <TabsTrigger 
               value="settings" 
               className="text-center whitespace-normal leading-tight py-3 px-2 h-auto min-h-[3rem]"
             >
-              <span className="block">API</span>
-              <span className="block">Settings</span>
+              API Settings
             </TabsTrigger>
           </TabsList>
           
