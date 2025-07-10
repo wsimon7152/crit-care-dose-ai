@@ -1,6 +1,5 @@
 import { ApiKeyConfig } from '../types';
-// @ts-ignore
-import * as pdfParse from 'pdf-parse';
+import * as pdfjsLib from 'pdfjs-dist';
 
 export class StudyAnalysisService {
   /**
@@ -176,23 +175,41 @@ Instructions:
   }
 
   /**
-   * Extract text from PDF using pdf-parse library
+   * Extract text from PDF using pdfjs-dist (browser-compatible)
    */
   static async extractTextFromPDF(file: File): Promise<string> {
     try {
+      // Set worker source for pdfjs
+      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://unpkg.com/pdfjs-dist@4.0.379/build/pdf.worker.min.js';
+      
       // Convert File to ArrayBuffer
       const arrayBuffer = await file.arrayBuffer();
-      const uint8Array = new Uint8Array(arrayBuffer);
       
-      // Parse PDF text
-      const pdfData = await pdfParse(uint8Array);
+      // Load PDF document
+      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
       
-      if (!pdfData.text || pdfData.text.trim().length === 0) {
+      let fullText = '';
+      const numPages = pdf.numPages;
+      
+      // Extract text from each page
+      for (let pageNum = 1; pageNum <= numPages; pageNum++) {
+        const page = await pdf.getPage(pageNum);
+        const textContent = await page.getTextContent();
+        
+        // Combine text items into readable text
+        const pageText = textContent.items
+          .map((item: any) => item.str)
+          .join(' ');
+        
+        fullText += `Page ${pageNum}:\n${pageText}\n\n`;
+      }
+      
+      if (!fullText || fullText.trim().length === 0) {
         throw new Error('No text content found in PDF');
       }
       
       // Clean up the extracted text
-      const cleanText = pdfData.text
+      const cleanText = fullText
         .replace(/\s+/g, ' ')
         .replace(/\n+/g, '\n')
         .trim();
@@ -203,7 +220,7 @@ EXTRACTED TEXT:
 ${cleanText}
 
 METADATA:
-- Pages: ${pdfData.numpages}
+- Pages: ${numPages}
 - File size: ${(file.size / 1024 / 1024).toFixed(2)} MB
 - Extraction timestamp: ${new Date().toISOString()}`;
       
