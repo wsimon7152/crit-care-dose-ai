@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useAuth } from '../contexts/AuthContext';
 import { ResearchIntegrationService } from '../services/researchIntegration';
+import { AIService } from '../services/aiService';
 import { toast } from 'sonner';
 
 interface AIIntegrationProps {
@@ -56,120 +57,57 @@ export const AIIntegration: React.FC<AIIntegrationProps> = ({
       return;
     }
 
+    const selectedKeyData = userApiKeys.find(key => key.id === selectedApiKey);
+    if (!selectedKeyData) {
+      toast.error('Selected API key not found');
+      return;
+    }
+
     setIsGenerating(true);
     
     try {
       // Update preferred model
       updatePreferredModel(selectedModel);
 
-      // Generate research-integrated prompt using the new service
+      // Generate research-integrated prompt using the service
       const researchPrompt = ResearchIntegrationService.generateStudyIntegratedPrompt(
         patientInput.antibioticName,
         patientInput,
         pkResults
       );
 
-      // Mock AI integration with comprehensive research verification
-      await new Promise(resolve => setTimeout(resolve, 3000)); // Simulate longer verification process
+      // Make real AI API call
+      console.log(`Generating AI summary with ${selectedKeyData.provider} - ${selectedModel}`);
+      const aiSummary = await AIService.generateClinicalSummary(
+        selectedKeyData,
+        selectedModel,
+        patientInput,
+        pkResults,
+        researchPrompt
+      );
       
       const selectedModelName = availableModels.find(m => m.id === selectedModel)?.name || selectedModel;
       
-      // Get research data for the summary
-      const relevantStudies = ResearchIntegrationService.findRelevantStudies(patientInput.antibioticName, patientInput);
-      const evidenceAlerts = ResearchIntegrationService.generateEvidenceAlerts(patientInput.antibioticName, patientInput, pkResults);
-      const citations = ResearchIntegrationService.generateStudyCitations(patientInput.antibioticName, patientInput);
-      const studyUpdates = ResearchIntegrationService.checkForStudyUpdates(patientInput.antibioticName);
+      // Add metadata header to AI response
+      const enhancedSummary = `# AI Clinical Analysis
+
+**Generated using ${selectedModelName}**  
+**Analysis completed at ${new Date().toLocaleString()}**
+
+---
+
+${aiSummary}
+
+---
+
+*This analysis was generated using real AI and incorporates available research data from the platform.*`;
       
-      // Enhanced mock verification process with real research integration
-      const mockSummary = `# Clinical Summary - Study Verified
-
-**Generated using ${selectedModelName}**
-
----
-
-## ✅ High Confidence Recommendation
-
-**Verified platform studies + external validation**
-
-The recommended dosing of **${patientInput.antibioticName}** at **${pkResults.doseRecommendation}** is based on verified, prioritized evidence:
-
----
-
-## 📚 Platform Studies (Priority Sources)
-
-${relevantStudies.length > 0 ? 
-  relevantStudies.map(study => `### ${study.title}
-- **Status**: ✅ Verified platform study
-- **Authors**: ${study.authors} (${study.year || new Date(study.uploadedAt).getFullYear()})
-- **Key finding**: ${study.notes || 'Clinical guidance for CRRT dosing'}
-- **Tags**: ${study.tags.join(', ')}
-`).join('\n') : 
-'### No Platform Studies Available\n- **Status**: ⚠️ No studies uploaded for this drug/CRRT combination\n- **Recommendation**: Upload relevant research to improve evidence base\n'
-}
-
----
-
-## ⚠️ Evidence Alerts
-
-${evidenceAlerts.length > 0 ? evidenceAlerts.map(alert => `- ${alert}`).join('\n') : '- No specific alerts for this combination'}
-
----
-
-## 🚨 Research Updates Needed
-
-${studyUpdates.hasUpdates ? 
-  studyUpdates.recommendations.map(rec => `- ${rec}`).join('\n') : 
-  '- Research base is current and complete'
-}
-
----
-
-## ⚠️ External Validation (Cross-Referenced)
-
-### 🚨 ACTION REQUIRED: Newer Study Found
-
-**Johnson et al. (2024) - Updated CRRT pharmacokinetics guidelines**
-- **Published**: 3 months after our platform studies
-- **⚠️ RECOMMENDATION**: Review and consider uploading to platform
-- **Potential Impact**: May contain updated clearance calculations
-
----
-
-## 🔬 Pharmacokinetic Analysis (Platform-Verified)
-
-- **Total clearance**: ${pkResults.totalClearance.toFixed(1)} L/h ${relevantStudies.length > 0 ? `(validated against ${relevantStudies.length} platform study/studies)` : '(no platform validation available)'}
-- **CRRT impact**: ${relevantStudies.length > 0 ? 'Confirmed with platform research' : 'Based on general principles'} on ${patientInput.crrtModality || 'CRRT'}  
-- **Target attainment**: ${patientInput.mic ? `%T>MIC of ${pkResults.percentTimeAboveMic.toFixed(1)}% ${pkResults.percentTimeAboveMic >= 40 ? 'meets' : 'below'} therapeutic targets` : 'MIC-based optimization requires organism data'}
-
----
-
-## 🏥 Clinical Considerations (Evidence-Based)
-
-${patientInput.liverDisease ? `- **Liver disease**: Reduce hepatic clearance by 50% ${relevantStudies.some(s => s.notes?.toLowerCase().includes('liver')) ? '(supported by platform studies)' : '(general recommendation)'}\n` : ''}${patientInput.ecmoTreatment ? `- **ECMO**: Increase Vd, loading dose recommended ${relevantStudies.some(s => s.notes?.toLowerCase().includes('ecmo')) ? '(supported by platform studies)' : '(general recommendation)'}\n` : ''}${patientInput.heartFailure ? `- **Heart failure**: Monitor distribution changes ${relevantStudies.some(s => s.notes?.toLowerCase().includes('heart')) ? '(platform guidance available)' : '(external validation needed)'}\n` : ''}${!patientInput.liverDisease && !patientInput.ecmoTreatment && !patientInput.heartFailure ? '- Standard patient profile, no special considerations identified' : ''}
-
----
-
-## 📋 Study Verification Status
-
-| Source | Status | Action |
-|--------|--------|--------|
-| Platform studies | ${relevantStudies.length > 0 ? `✅ ${relevantStudies.length} verified and prioritized` : '⚠️ None available'} | ${relevantStudies.length > 0 ? 'None' : 'Upload relevant research'} |
-| Research gaps | ${studyUpdates.hasUpdates ? '⚠️ Updates needed' : '✅ Current'} | ${studyUpdates.hasUpdates ? 'Review required' : 'None'} |
-| **Evidence level** | **${relevantStudies.length > 0 ? 'HIGH' : 'LOW'} (platform-verified)** | **${relevantStudies.length === 0 ? 'HIGH PRIORITY - UPLOAD STUDIES' : 'Continue monitoring'}** |
-
----
-
-## 📊 Summary
-
-- **Confidence Level**: ${relevantStudies.length > 0 ? 'High' : 'Low'} (${relevantStudies.length} platform study/studies + external validation)
-- **AI Model**: ${selectedModelName}
-- **Citations**: ${citations.citationText}
-- **Action Required**: ${studyUpdates.hasUpdates || relevantStudies.length === 0 ? 'Yes' : 'No'} - ${studyUpdates.hasUpdates ? 'Review research updates' : relevantStudies.length === 0 ? 'Upload relevant studies' : 'Continue current protocol'}`;
-      
-      onSummaryGenerated(mockSummary);
+      onSummaryGenerated(enhancedSummary);
       toast.success(`AI summary generated using ${selectedModelName}`);
     } catch (error) {
-      toast.error('Failed to generate AI summary');
+      console.error('AI generation error:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      toast.error(`Failed to generate AI summary: ${errorMessage}`);
     } finally {
       setIsGenerating(false);
     }
