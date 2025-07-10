@@ -1,318 +1,594 @@
-
 import React from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Info, AlertTriangle, CheckCircle, ExternalLink, FileText } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Info, AlertTriangle, CheckCircle, ExternalLink, FileText, Calculator, BookOpen, Beaker } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
-import { PKResult } from '../types';
+import { PKResult, PatientInput, PKParameters } from '../types';
 
 interface PKResultsDisplayProps {
   results: PKResult;
   mic?: number;
   antibioticName: string;
+  patientInput: PatientInput;
+  pkParameters: PKParameters;
+  drugReferences?: string[];
 }
 
-export const PKResultsDisplay: React.FC<PKResultsDisplayProps> = ({ results, mic, antibioticName }) => {
+export const PKResultsDisplay: React.FC<PKResultsDisplayProps> = ({ 
+  results, 
+  mic, 
+  antibioticName, 
+  patientInput, 
+  pkParameters, 
+  drugReferences = [] 
+}) => {
   const { evidenceAlerts = [], supportingStudies = [], citationText } = results;
 
   return (
     <div className="space-y-6">
-      {/* Evidence Alerts Section */}
-      {evidenceAlerts.length > 0 && (
-        <Card className="border-blue-200 bg-blue-50">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-lg flex items-center gap-2">
-              <CheckCircle className="h-5 w-5 text-blue-600" />
-              Evidence-Based Alerts
-            </CardTitle>
-            <CardDescription>
-              Real-time alerts based on approved platform research
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              {evidenceAlerts.map((alert, index) => (
-                <div 
-                  key={index}
-                  className={`p-3 rounded-lg flex items-start gap-2 ${
-                    alert.includes('⚠️') ? 'bg-yellow-100 border border-yellow-300' :
-                    alert.includes('✅') ? 'bg-green-100 border border-green-300' :
-                    'bg-blue-100 border border-blue-300'
-                  }`}
-                >
-                  <div className="flex-1 text-sm font-medium">
-                    {alert}
+      <Tabs defaultValue="results" className="w-full">
+        <TabsList className="grid w-full grid-cols-3">
+          <TabsTrigger value="results">Clinical Results</TabsTrigger>
+          <TabsTrigger value="calculations">Calculation Details</TabsTrigger>
+          <TabsTrigger value="references">Data Sources</TabsTrigger>
+        </TabsList>
+        
+        <TabsContent value="results" className="space-y-6">
+          {/* Evidence Alerts Section */}
+          {evidenceAlerts.length > 0 && (
+            <Card className="border-blue-200 bg-blue-50">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <CheckCircle className="h-5 w-5 text-blue-600" />
+                  Evidence-Based Alerts
+                </CardTitle>
+                <CardDescription>
+                  Real-time alerts based on approved platform research
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  {evidenceAlerts.map((alert, index) => (
+                    <div 
+                      key={index}
+                      className={`p-3 rounded-lg flex items-start gap-2 ${
+                        alert.includes('⚠️') ? 'bg-yellow-100 border border-yellow-300' :
+                        alert.includes('✅') ? 'bg-green-100 border border-green-300' :
+                        'bg-blue-100 border border-blue-300'
+                      }`}
+                    >
+                      <div className="flex-1 text-sm font-medium">
+                        {alert}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Dose Recommendation */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-xl text-blue-900">Dosing Recommendation</CardTitle>
+              <CardDescription>Evidence-based dosing for CRRT patients</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div className="p-4 bg-blue-50 rounded-lg">
+                  <h3 className="font-semibold text-lg mb-2">{antibioticName}</h3>
+                  <p className="text-2xl font-bold text-blue-800 mb-2">{results.doseRecommendation}</p>
+                  <p className="text-sm text-gray-700">{results.rationale}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* PK Metrics */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <Card>
+              <CardHeader className="pb-2">
+                <div className="flex items-center gap-2">
+                  <CardTitle className="text-sm font-medium">Total Clearance</CardTitle>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="ghost" size="sm" className="h-auto p-1">
+                        <Info className="h-3 w-3 text-muted-foreground" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-80">
+                      <div className="space-y-2">
+                        <h4 className="font-medium">Total Clearance</h4>
+                        <p className="text-sm text-muted-foreground">
+                          The sum of renal clearance, hepatic clearance, and CRRT clearance. 
+                          Higher values indicate faster drug elimination from the body.
+                        </p>
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-green-600">
+                  {results.totalClearance.toFixed(1)} L/h
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-2">
+                <div className="flex items-center gap-2">
+                  <CardTitle className="text-sm font-medium">AUC₀₋₂₄</CardTitle>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="ghost" size="sm" className="h-auto p-1">
+                        <Info className="h-3 w-3 text-muted-foreground" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-80">
+                      <div className="space-y-2">
+                        <h4 className="font-medium">Area Under the Curve (0-24h)</h4>
+                        <p className="text-sm text-muted-foreground">
+                          Total drug exposure over 24 hours. Higher AUC values indicate 
+                          greater drug exposure, which correlates with efficacy for many antibiotics.
+                        </p>
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-blue-600">
+                  {results.auc024.toFixed(0)} mg·h/L
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-2">
+                <div className="flex items-center gap-2">
+                  <CardTitle className="text-sm font-medium">MIC</CardTitle>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="ghost" size="sm" className="h-auto p-1">
+                        <Info className="h-3 w-3 text-muted-foreground" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-80">
+                      <div className="space-y-2">
+                        <h4 className="font-medium">Minimum Inhibitory Concentration</h4>
+                        <p className="text-sm text-muted-foreground">
+                          The lowest concentration of antibiotic that inhibits bacterial growth. 
+                          Lower MIC values indicate higher bacterial susceptibility to the antibiotic.
+                        </p>
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-gray-600">
+                  {mic ? `${mic} mg/L` : 'Not specified'}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-2">
+                <div className="flex items-center gap-2">
+                  <CardTitle className="text-sm font-medium">%T &gt; MIC</CardTitle>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="ghost" size="sm" className="h-auto p-1">
+                        <Info className="h-3 w-3 text-muted-foreground" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-80">
+                      <div className="space-y-2">
+                        <h4 className="font-medium">Percent Time Above MIC</h4>
+                        <p className="text-sm text-muted-foreground">
+                          The percentage of time that drug concentration remains above the MIC. 
+                          For beta-lactams like meropenem, target is typically ≥40% for efficacy.
+                        </p>
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center space-x-2">
+                  <div className="text-2xl font-bold text-purple-600">
+                    {mic ? `${results.percentTimeAboveMic.toFixed(1)}%` : 'N/A'}
+                  </div>
+                  {mic && (
+                    <Badge variant={results.percentTimeAboveMic >= 40 ? 'default' : 'destructive'}>
+                      {results.percentTimeAboveMic >= 40 ? 'Target' : 'Low'}
+                    </Badge>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Concentration-Time Curve */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Concentration-Time Profile</CardTitle>
+              <CardDescription>Simulated plasma concentration over 24 hours</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="h-80">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={results.concentrationCurve}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis 
+                      dataKey="time" 
+                      label={{ value: 'Time (hours)', position: 'insideBottom', offset: -5 }}
+                    />
+                    <YAxis 
+                      label={{ value: 'Concentration (mg/L)', angle: -90, position: 'insideLeft' }}
+                    />
+                    <Tooltip 
+                      formatter={(value: number) => [`${value.toFixed(2)} mg/L`, 'Concentration']}
+                      labelFormatter={(time) => `Time: ${time} hours`}
+                    />
+                    <Line 
+                      type="monotone" 
+                      dataKey="concentration" 
+                      stroke="#2563eb" 
+                      strokeWidth={2}
+                      dot={false}
+                    />
+                    {mic && (
+                      <ReferenceLine 
+                        y={mic} 
+                        stroke="#dc2626" 
+                        strokeDasharray="5 5"
+                        label={{ value: `MIC: ${mic} mg/L`, position: 'top' }}
+                      />
+                    )}
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Supporting Studies Section */}
+          {supportingStudies.length > 0 && (
+            <Card className="border-green-200 bg-green-50">
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <FileText className="h-5 w-5 text-green-600" />
+                  Supporting Research
+                </CardTitle>
+                <CardDescription>
+                  Platform studies that informed this recommendation
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {supportingStudies.map((study) => (
+                    <div key={study.id} className="bg-white p-4 rounded-lg border border-green-200">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <h4 className="font-semibold text-green-900 mb-1">{study.title}</h4>
+                          <p className="text-sm text-green-700 mb-2">
+                            {study.authors} ({study.year || new Date(study.uploadedAt).getFullYear()})
+                          </p>
+                          <div className="flex flex-wrap gap-1 mb-2">
+                            {study.tags.map((tag) => (
+                              <Badge key={tag} variant="secondary" className="text-xs bg-green-100 text-green-800">
+                                {tag}
+                              </Badge>
+                            ))}
+                          </div>
+                          {study.notes && (
+                            <p className="text-sm text-green-600 italic">{study.notes}</p>
+                          )}
+                        </div>
+                        {study.url && (
+                          <a 
+                            href={study.url} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="ml-4 p-2 text-green-600 hover:text-green-800"
+                          >
+                            <ExternalLink className="h-4 w-4" />
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                {citationText && (
+                  <div className="mt-4 p-3 bg-white rounded-lg border border-green-200">
+                    <p className="text-sm text-green-700">
+                      <strong>Citation:</strong> {citationText}
+                    </p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* No Studies Available */}
+          {supportingStudies.length === 0 && (
+            <Card className="border-yellow-200 bg-yellow-50">
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <AlertTriangle className="h-5 w-5 text-yellow-600" />
+                  Research Gap Identified
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-yellow-800">
+                  No platform studies found for this drug/CRRT combination. Consider uploading relevant research 
+                  to improve evidence-based recommendations for future patients.
+                </p>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
+        <TabsContent value="calculations" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Calculator className="h-5 w-5" />
+                Pharmacokinetic Calculations
+              </CardTitle>
+              <CardDescription>
+                Complete transparency of all formulas and calculations used
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Input Parameters Section */}
+              <div>
+                <h3 className="font-semibold text-lg mb-3 flex items-center gap-2">
+                  <Beaker className="h-4 w-4" />
+                  Input Parameters
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <h4 className="font-medium text-sm">Patient Characteristics</h4>
+                    <div className="bg-gray-50 p-3 rounded text-sm space-y-1">
+                      <div>Age: {patientInput.age || 'Not specified'} years</div>
+                      <div>Weight: {patientInput.weight || 70} kg (default if not specified)</div>
+                      <div>Gender: {patientInput.gender || 'Not specified'}</div>
+                      <div>Liver Disease: {patientInput.liverDisease ? 'Yes' : 'No'}</div>
+                      <div>ECMO: {patientInput.ecmoTreatment ? 'Yes' : 'No'}</div>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <h4 className="font-medium text-sm">CRRT Settings</h4>
+                    <div className="bg-gray-50 p-3 rounded text-sm space-y-1">
+                      <div>Modality: {patientInput.crrtModality || 'Not specified'}</div>
+                      <div>Blood Flow: {patientInput.bloodFlowRate || 'Default'} mL/min</div>
+                      <div>Dialysate Flow: {patientInput.dialysateFlowRate || 'Default'} mL/kg/hr</div>
+                      <div>Pre-filter: {patientInput.preFilterReplacementRate || 'N/A'} mL/kg/hr</div>
+                      <div>Post-filter: {patientInput.postFilterReplacementRate || 'N/A'} mL/kg/hr</div>
+                    </div>
                   </div>
                 </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Dose Recommendation */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-xl text-blue-900">Dosing Recommendation</CardTitle>
-          <CardDescription>Evidence-based dosing for CRRT patients</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            <div className="p-4 bg-blue-50 rounded-lg">
-              <h3 className="font-semibold text-lg mb-2">{antibioticName}</h3>
-              <p className="text-2xl font-bold text-blue-800 mb-2">{results.doseRecommendation}</p>
-              <p className="text-sm text-gray-700">{results.rationale}</p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* PK Metrics */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card>
-          <CardHeader className="pb-2">
-            <div className="flex items-center gap-2">
-              <CardTitle className="text-sm font-medium">Total Clearance</CardTitle>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button variant="ghost" size="sm" className="h-auto p-1">
-                    <Info className="h-3 w-3 text-muted-foreground" />
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-80">
-                  <div className="space-y-2">
-                    <h4 className="font-medium">Total Clearance</h4>
-                    <p className="text-sm text-muted-foreground">
-                      The sum of renal clearance, hepatic clearance, and CRRT clearance. 
-                      Higher values indicate faster drug elimination from the body.
-                    </p>
-                  </div>
-                </PopoverContent>
-              </Popover>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-600">
-              {results.totalClearance.toFixed(1)} L/h
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <div className="flex items-center gap-2">
-              <CardTitle className="text-sm font-medium">AUC₀₋₂₄</CardTitle>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button variant="ghost" size="sm" className="h-auto p-1">
-                    <Info className="h-3 w-3 text-muted-foreground" />
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-80">
-                  <div className="space-y-2">
-                    <h4 className="font-medium">Area Under the Curve (0-24h)</h4>
-                    <p className="text-sm text-muted-foreground">
-                      Total drug exposure over 24 hours. Higher AUC values indicate 
-                      greater drug exposure, which correlates with efficacy for many antibiotics.
-                    </p>
-                  </div>
-                </PopoverContent>
-              </Popover>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-blue-600">
-              {results.auc024.toFixed(0)} mg·h/L
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <div className="flex items-center gap-2">
-              <CardTitle className="text-sm font-medium">MIC</CardTitle>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button variant="ghost" size="sm" className="h-auto p-1">
-                    <Info className="h-3 w-3 text-muted-foreground" />
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-80">
-                  <div className="space-y-2">
-                    <h4 className="font-medium">Minimum Inhibitory Concentration</h4>
-                    <p className="text-sm text-muted-foreground">
-                      The lowest concentration of antibiotic that inhibits bacterial growth. 
-                      Lower MIC values indicate higher bacterial susceptibility to the antibiotic.
-                    </p>
-                  </div>
-                </PopoverContent>
-              </Popover>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-gray-600">
-              {mic ? `${mic} mg/L` : 'Not specified'}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <div className="flex items-center gap-2">
-              <CardTitle className="text-sm font-medium">%T &gt; MIC</CardTitle>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button variant="ghost" size="sm" className="h-auto p-1">
-                    <Info className="h-3 w-3 text-muted-foreground" />
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-80">
-                  <div className="space-y-2">
-                    <h4 className="font-medium">Percent Time Above MIC</h4>
-                    <p className="text-sm text-muted-foreground">
-                      The percentage of time that drug concentration remains above the MIC. 
-                      For beta-lactams like meropenem, target is typically ≥40% for efficacy.
-                    </p>
-                  </div>
-                </PopoverContent>
-              </Popover>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center space-x-2">
-              <div className="text-2xl font-bold text-purple-600">
-                {mic ? `${results.percentTimeAboveMic.toFixed(1)}%` : 'N/A'}
               </div>
-              {mic && (
-                <Badge variant={results.percentTimeAboveMic >= 40 ? 'default' : 'destructive'}>
-                  {results.percentTimeAboveMic >= 40 ? 'Target' : 'Low'}
-                </Badge>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
 
-      {/* Concentration-Time Curve */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Concentration-Time Profile</CardTitle>
-          <CardDescription>Simulated plasma concentration over 24 hours</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="h-80">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={results.concentrationCurve}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis 
-                  dataKey="time" 
-                  label={{ value: 'Time (hours)', position: 'insideBottom', offset: -5 }}
-                />
-                <YAxis 
-                  label={{ value: 'Concentration (mg/L)', angle: -90, position: 'insideLeft' }}
-                />
-                <Tooltip 
-                  formatter={(value: number) => [`${value.toFixed(2)} mg/L`, 'Concentration']}
-                  labelFormatter={(time) => `Time: ${time} hours`}
-                />
-                <Line 
-                  type="monotone" 
-                  dataKey="concentration" 
-                  stroke="#2563eb" 
-                  strokeWidth={2}
-                  dot={false}
-                />
-                {mic && (
-                  <ReferenceLine 
-                    y={mic} 
-                    stroke="#dc2626" 
-                    strokeDasharray="5 5"
-                    label={{ value: `MIC: ${mic} mg/L`, position: 'top' }}
-                  />
-                )}
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Supporting Studies Section */}
-      {supportingStudies.length > 0 && (
-        <Card className="border-green-200 bg-green-50">
-          <CardHeader>
-            <CardTitle className="text-lg flex items-center gap-2">
-              <FileText className="h-5 w-5 text-green-600" />
-              Supporting Research
-            </CardTitle>
-            <CardDescription>
-              Platform studies that informed this recommendation
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {supportingStudies.map((study) => (
-                <div key={study.id} className="bg-white p-4 rounded-lg border border-green-200">
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <h4 className="font-semibold text-green-900 mb-1">{study.title}</h4>
-                      <p className="text-sm text-green-700 mb-2">
-                        {study.authors} ({study.year || new Date(study.uploadedAt).getFullYear()})
-                      </p>
-                      <div className="flex flex-wrap gap-1 mb-2">
-                        {study.tags.map((tag) => (
-                          <Badge key={tag} variant="secondary" className="text-xs bg-green-100 text-green-800">
-                            {tag}
-                          </Badge>
-                        ))}
-                      </div>
-                      {study.notes && (
-                        <p className="text-sm text-green-600 italic">{study.notes}</p>
-                      )}
+              {/* Drug Parameters Section */}
+              <div>
+                <h3 className="font-semibold text-lg mb-3">Drug Parameters ({antibioticName})</h3>
+                <div className="bg-blue-50 p-4 rounded">
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
+                    <div>
+                      <div className="font-medium">Standard Dose</div>
+                      <div>{pkParameters.standardDose} mg</div>
                     </div>
-                    {study.url && (
-                      <a 
-                        href={study.url} 
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        className="ml-4 p-2 text-green-600 hover:text-green-800"
-                      >
-                        <ExternalLink className="h-4 w-4" />
-                      </a>
+                    <div>
+                      <div className="font-medium">Dosing Interval</div>
+                      <div>{pkParameters.interval} hours</div>
+                    </div>
+                    <div>
+                      <div className="font-medium">Volume of Distribution</div>
+                      <div>{pkParameters.volumeOfDistribution} L/kg</div>
+                    </div>
+                    <div>
+                      <div className="font-medium">Protein Binding</div>
+                      <div>{(pkParameters.proteinBinding * 100).toFixed(1)}%</div>
+                    </div>
+                    <div>
+                      <div className="font-medium">CRRT Clearance (baseline)</div>
+                      <div>{pkParameters.crrtClearance} L/h</div>
+                    </div>
+                    <div>
+                      <div className="font-medium">Half-life</div>
+                      <div>{pkParameters.halfLife} hours</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Calculation Steps */}
+              <div>
+                <h3 className="font-semibold text-lg mb-3">Step-by-Step Calculations</h3>
+                <div className="space-y-4">
+                  {/* CRRT Clearance Calculation */}
+                  <div className="bg-green-50 p-4 rounded border border-green-200">
+                    <h4 className="font-medium mb-2">1. CRRT Clearance Adjustment</h4>
+                    <div className="text-sm space-y-1">
+                      <div><strong>Formula:</strong> Adjusted CL_CRRT = Baseline × Flow_multiplier × (1 - Protein_binding)</div>
+                      <div><strong>Flow Multiplier:</strong> Based on blood flow ({patientInput.bloodFlowRate || 150} mL/min) and dialysate flow ({patientInput.dialysateFlowRate || 25} mL/kg/hr)</div>
+                      <div><strong>Free Fraction:</strong> (1 - {pkParameters.proteinBinding}) = {(1 - pkParameters.proteinBinding).toFixed(3)}</div>
+                      <div><strong>Result:</strong> ~{(results.totalClearance * 0.6).toFixed(1)} L/h (estimated CRRT component)</div>
+                    </div>
+                  </div>
+
+                  {/* Total Clearance Calculation */}
+                  <div className="bg-blue-50 p-4 rounded border border-blue-200">
+                    <h4 className="font-medium mb-2">2. Total Clearance</h4>
+                    <div className="text-sm space-y-1">
+                      <div><strong>Formula:</strong> CL_total = CL_CRRT + CL_hepatic + CL_residual_renal</div>
+                      <div><strong>Hepatic Adjustment:</strong> {patientInput.liverDisease ? '50%' : '80%'} of baseline {patientInput.liverDisease ? '(liver disease)' : '(normal)'}</div>
+                      <div><strong>Result:</strong> {results.totalClearance.toFixed(1)} L/h</div>
+                    </div>
+                  </div>
+
+                  {/* AUC Calculation */}
+                  <div className="bg-purple-50 p-4 rounded border border-purple-200">
+                    <h4 className="font-medium mb-2">3. Area Under Curve (AUC₀₋₂₄)</h4>
+                    <div className="text-sm space-y-1">
+                      <div><strong>Formula:</strong> AUC = Total_Daily_Dose / CL_total</div>
+                      <div><strong>Daily Dose:</strong> {pkParameters.standardDose} mg × {24 / pkParameters.interval} doses = {pkParameters.standardDose * (24 / pkParameters.interval)} mg</div>
+                      <div><strong>Result:</strong> {results.auc024.toFixed(0)} mg·h/L</div>
+                    </div>
+                  </div>
+
+                  {/* Time Above MIC Calculation */}
+                  {mic && (
+                    <div className="bg-orange-50 p-4 rounded border border-orange-200">
+                      <h4 className="font-medium mb-2">4. Percent Time Above MIC</h4>
+                      <div className="text-sm space-y-1">
+                        <div><strong>Formula:</strong> %T&gt;MIC = (ln(C₀/MIC) / k_e) / dosing_interval × 100</div>
+                        <div><strong>Initial Concentration (C₀):</strong> Dose / (Vd × Weight) = {pkParameters.standardDose} / ({pkParameters.volumeOfDistribution} × {patientInput.weight || 70}) = {(pkParameters.standardDose / (pkParameters.volumeOfDistribution * (patientInput.weight || 70))).toFixed(1)} mg/L</div>
+                        <div><strong>Elimination Rate (k_e):</strong> CL_total / (Vd × Weight) = {(results.totalClearance / (pkParameters.volumeOfDistribution * (patientInput.weight || 70))).toFixed(3)} h⁻¹</div>
+                        <div><strong>MIC:</strong> {mic} mg/L</div>
+                        <div><strong>Result:</strong> {results.percentTimeAboveMic.toFixed(1)}%</div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Research Study Adjustments */}
+              {supportingStudies.length > 0 && (
+                <div>
+                  <h3 className="font-semibold text-lg mb-3">Research-Based Adjustments</h3>
+                  <div className="bg-green-50 p-4 rounded border border-green-200">
+                    <div className="text-sm space-y-2">
+                      <div><strong>Applied Studies:</strong> {supportingStudies.length} platform study(ies)</div>
+                      <div><strong>Adjustments Made:</strong> Parameters modified based on {supportingStudies.map(s => s.title).join(', ')}</div>
+                      <div className="text-xs text-green-700 italic">
+                        Note: Research studies may have influenced clearance calculations, dosing intervals, or target parameters
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="references" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <BookOpen className="h-5 w-5" />
+                Data Sources & References
+              </CardTitle>
+              <CardDescription>
+                All sources of data used in calculations and recommendations
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Drug Database References */}
+              <div>
+                <h3 className="font-semibold text-lg mb-3">Drug Database References</h3>
+                <div className="bg-blue-50 p-4 rounded border border-blue-200">
+                  <div className="space-y-2">
+                    <div className="font-medium">Pharmacokinetic Parameters Source:</div>
+                    {drugReferences.length > 0 ? (
+                      <ul className="text-sm space-y-1">
+                        {drugReferences.map((ref, index) => (
+                          <li key={index} className="flex items-start gap-2">
+                            <span className="text-blue-600">•</span>
+                            {ref}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <div className="text-sm text-gray-600">Standard pharmacokinetic literature and manufacturer data</div>
                     )}
                   </div>
                 </div>
-              ))}
-            </div>
-            {citationText && (
-              <div className="mt-4 p-3 bg-white rounded-lg border border-green-200">
-                <p className="text-sm text-green-700">
-                  <strong>Citation:</strong> {citationText}
-                </p>
               </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
 
-      {/* No Studies Available */}
-      {supportingStudies.length === 0 && (
-        <Card className="border-yellow-200 bg-yellow-50">
-          <CardHeader>
-            <CardTitle className="text-lg flex items-center gap-2">
-              <AlertTriangle className="h-5 w-5 text-yellow-600" />
-              Research Gap Identified
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-yellow-800">
-              No platform studies found for this drug/CRRT combination. Consider uploading relevant research 
-              to improve evidence-based recommendations for future patients.
-            </p>
-          </CardContent>
-        </Card>
-      )}
+              {/* Platform Research */}
+              {supportingStudies.length > 0 && (
+                <div>
+                  <h3 className="font-semibold text-lg mb-3">Platform Research Studies</h3>
+                  <div className="space-y-3">
+                    {supportingStudies.map((study) => (
+                      <div key={study.id} className="bg-green-50 p-4 rounded border border-green-200">
+                        <div className="space-y-2">
+                          <div className="font-medium">{study.title}</div>
+                          <div className="text-sm text-gray-700">{study.authors} ({study.year || new Date(study.uploadedAt).getFullYear()})</div>
+                          <div className="flex flex-wrap gap-1">
+                            {study.tags.map((tag) => (
+                              <Badge key={tag} variant="secondary" className="text-xs">
+                                {tag}
+                              </Badge>
+                            ))}
+                          </div>
+                          {study.notes && (
+                            <div className="text-sm text-green-700 bg-green-100 p-2 rounded">
+                              <strong>Study Impact:</strong> {study.notes}
+                            </div>
+                          )}
+                          <div className="text-xs text-gray-600">
+                            Uploaded by: {study.uploadedBy} on {study.uploadedAt.toLocaleDateString()}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Clinical Guidelines */}
+              <div>
+                <h3 className="font-semibold text-lg mb-3">Clinical Guidelines & Standards</h3>
+                <div className="bg-gray-50 p-4 rounded border border-gray-200">
+                  <div className="space-y-2 text-sm">
+                    <div><strong>CRRT Guidelines:</strong> Kidney Disease: Improving Global Outcomes (KDIGO)</div>
+                    <div><strong>Antibiotic Dosing:</strong> Sanford Guide to Antimicrobial Therapy</div>
+                    <div><strong>Pharmacokinetics:</strong> Applied Pharmacokinetics & Pharmacodynamics</div>
+                    <div><strong>Critical Care:</strong> Society of Critical Care Medicine (SCCM) Guidelines</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Calculation Methodology */}
+              <div>
+                <h3 className="font-semibold text-lg mb-3">Calculation Methodology</h3>
+                <div className="bg-yellow-50 p-4 rounded border border-yellow-200">
+                  <div className="space-y-2 text-sm">
+                    <div><strong>PK Model:</strong> One-compartment pharmacokinetic model with first-order elimination</div>
+                    <div><strong>CRRT Modeling:</strong> Extracorporeal clearance based on flow rates and sieving coefficients</div>
+                    <div><strong>Protein Binding:</strong> Free drug concentration calculations for CRRT efficiency</div>
+                    <div><strong>Statistical Methods:</strong> Population pharmacokinetic parameters with individual patient adjustments</div>
+                    <div className="text-xs text-yellow-700 italic mt-2">
+                      Note: Calculations are estimates based on population data and should be used in conjunction with clinical judgment and therapeutic drug monitoring when available.
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* System Information */}
+              <div>
+                <h3 className="font-semibold text-lg mb-3">System Information</h3>
+                <div className="bg-gray-50 p-4 rounded border border-gray-200">
+                  <div className="space-y-1 text-sm">
+                    <div><strong>Platform:</strong> Clinical Decision Support System for CRRT Antibiotic Dosing</div>
+                    <div><strong>Calculation Date:</strong> {new Date().toLocaleString()}</div>
+                    <div><strong>Version:</strong> 1.0.0</div>
+                    <div><strong>Research Integration:</strong> {supportingStudies.length > 0 ? 'Active' : 'Standard guidelines only'}</div>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 };

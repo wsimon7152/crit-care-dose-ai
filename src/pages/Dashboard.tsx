@@ -9,6 +9,7 @@ import { ApiKeyManagement } from '../components/ApiKeyManagement';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent } from '@/components/ui/card';
 import { PKCalculationService } from '../services/pkCalculations';
+import { drugProfiles } from '../data/drugProfiles';
 import { useResearchUpdates } from '../hooks/use-research-updates';
 import { PatientInput, PKResult } from '../types';
 import { toast } from 'sonner';
@@ -61,13 +62,21 @@ export const Dashboard = () => {
               isLoading={isCalculating}
             />
             
-            {pkResults && currentInput && (
-              <>
-                <PKResultsDisplay 
-                  results={pkResults}
-                  mic={currentInput.mic}
-                  antibioticName={currentInput.antibioticName}
-                />
+            {pkResults && currentInput && (() => {
+              // Get drug profile for additional data
+              const normalizedDrugName = currentInput.antibioticName.toLowerCase().replace(/[-\s]/g, '');
+              const drugProfile = drugProfiles[normalizedDrugName] || drugProfiles[Object.keys(drugProfiles)[0]];
+              
+              return (
+                <>
+                  <PKResultsDisplay 
+                    results={pkResults}
+                    mic={currentInput.mic}
+                    antibioticName={currentInput.antibioticName}
+                    patientInput={currentInput}
+                    pkParameters={drugProfile.pkParameters}
+                    drugReferences={drugProfile.references}
+                  />
                 
                 <AIIntegration
                   onSummaryGenerated={handleAISummary}
@@ -84,8 +93,9 @@ export const Dashboard = () => {
                     </CardContent>
                   </Card>
                 )}
-              </>
-            )}
+                  </>
+                );
+              })()}
           </TabsContent>
           
           <TabsContent value="research">
