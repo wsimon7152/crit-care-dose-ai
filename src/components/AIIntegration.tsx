@@ -37,14 +37,24 @@ export const AIIntegration: React.FC<AIIntegrationProps> = ({
   patientInput, 
   pkResults 
 }) => {
+  console.log('AIIntegration component loaded');
+  console.log('Props received:', { patientInput, pkResults });
+  
   const { user, updatePreferredModel } = useAuth();
+  console.log('User data:', user);
+  
   const [selectedApiKey, setSelectedApiKey] = useState('');
   const [selectedModel, setSelectedModel] = useState(user?.preferredModel || '');
   const [isGenerating, setIsGenerating] = useState(false);
 
   const userApiKeys = user?.apiKeys || [];
+  console.log('Available API keys:', userApiKeys);
+  
   const selectedKeyData = userApiKeys.find(key => key.id === selectedApiKey);
   const availableModels = selectedKeyData ? MODEL_OPTIONS[selectedKeyData.provider] || [] : [];
+  
+  console.log('Selected key data:', selectedKeyData);
+  console.log('Available models:', availableModels);
 
   const generateSummary = async () => {
     console.log('Generate Summary clicked - Starting validation...');
