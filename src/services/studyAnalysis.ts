@@ -1,4 +1,6 @@
 import { ApiKeyConfig } from '../types';
+// @ts-ignore
+import * as pdfParse from 'pdf-parse';
 
 export class StudyAnalysisService {
   /**
@@ -131,43 +133,98 @@ Instructions:
    */
   static async extractTextFromUrl(url: string): Promise<string> {
     try {
-      // For PubMed URLs, we could extract the abstract
+      // Basic web scraping for publicly accessible content
+      const response = await fetch(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (compatible; StudyAnalyzer/1.0)'
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      
+      const html = await response.text();
+      
+      // Extract text content from HTML (basic implementation)
+      const textContent = html
+        .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+        .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '')
+        .replace(/<[^>]*>/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+      
+      // For PubMed URLs, try to extract specific sections
       if (url.includes('pubmed.ncbi.nlm.nih.gov')) {
-        // This would typically require scraping or using PubMed API
-        return `Study from PubMed: ${url}. Full text analysis requires PDF upload.`;
+        const abstractMatch = textContent.match(/Abstract[:\s]+(.*?)(?:Keywords|Methods|Results|$)/i);
+        const titleMatch = textContent.match(/<title[^>]*>([^<]+)/i);
+        
+        let extracted = `URL: ${url}\n\n`;
+        if (titleMatch) extracted += `TITLE: ${titleMatch[1].trim()}\n\n`;
+        if (abstractMatch) extracted += `ABSTRACT: ${abstractMatch[1].trim()}\n\n`;
+        extracted += `FULL TEXT: ${textContent.substring(0, 2000)}...`;
+        
+        return extracted;
       }
       
-      // For DOIs, could resolve and extract
-      if (url.includes('doi.org') || url.match(/10\.\d+/)) {
-        return `DOI reference: ${url}. Full text analysis requires PDF upload.`;
-      }
+      return `URL: ${url}\n\nEXTRACTED CONTENT:\n${textContent.substring(0, 3000)}...`;
       
-      return `External reference: ${url}. Limited analysis available from URL.`;
     } catch (error) {
-      return `URL reference: ${url}. Text extraction failed.`;
+      console.error('URL extraction failed:', error);
+      return `URL reference: ${url}\n\nText extraction failed: ${error instanceof Error ? error.message : 'Unknown error'}. Please try uploading a PDF instead.`;
     }
   }
 
   /**
-   * Mock PDF text extraction (would need proper PDF parser in production)
+   * Extract text from PDF using pdf-parse library
    */
   static async extractTextFromPDF(file: File): Promise<string> {
-    // In production, this would use a PDF parsing library
-    // For now, return a mock text that includes common study elements
-    return `
-TITLE: ${file.name.replace('.pdf', '').replace(/[-_]/g, ' ')}
+    try {
+      // Convert File to ArrayBuffer
+      const arrayBuffer = await file.arrayBuffer();
+      const uint8Array = new Uint8Array(arrayBuffer);
+      
+      // Parse PDF text
+      const pdfData = await pdfParse(uint8Array);
+      
+      if (!pdfData.text || pdfData.text.trim().length === 0) {
+        throw new Error('No text content found in PDF');
+      }
+      
+      // Clean up the extracted text
+      const cleanText = pdfData.text
+        .replace(/\s+/g, ' ')
+        .replace(/\n+/g, '\n')
+        .trim();
+      
+      return `PDF FILE: ${file.name}
+      
+EXTRACTED TEXT:
+${cleanText}
 
-ABSTRACT: This is a placeholder for PDF text extraction. In a production environment, 
-this would contain the actual extracted text from the PDF file including the title, 
-authors, abstract, methods, results, and conclusions.
+METADATA:
+- Pages: ${pdfData.numpages}
+- File size: ${(file.size / 1024 / 1024).toFixed(2)} MB
+- Extraction timestamp: ${new Date().toISOString()}`;
+      
+    } catch (error) {
+      console.error('PDF parsing failed:', error);
+      
+      // Fallback with more descriptive error
+      return `PDF FILE: ${file.name}
 
-AUTHORS: Smith AB, Johnson CD, Williams EF
+ERROR: Failed to extract text from PDF file.
+Reason: ${error instanceof Error ? error.message : 'Unknown parsing error'}
 
-YEAR: ${new Date().getFullYear()}
+This may occur if:
+- The PDF is password protected
+- The PDF contains only images/scanned text (OCR required)
+- The PDF is corrupted or in an unsupported format
 
-KEYWORDS: pharmacokinetics, CRRT, dosing, antibiotic, critical care
-
-[Full PDF text would be extracted here in production]
-`;
+Please try:
+1. Using a different PDF file
+2. Converting scanned PDFs to text-searchable format
+3. Using the URL input method if the study is available online`;
+    }
   }
 }
