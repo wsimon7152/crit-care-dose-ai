@@ -24,6 +24,7 @@ export interface PatientInput {
   heartDisease: boolean;
   heartFailure: boolean;
   dialysateFlowRate?: number;
+  dialysateFlowRateUnit?: 'ml/hr' | 'ml/kg/hr';
   bloodFlowRate?: number;
   preFilterReplacementRate?: number;
   postFilterReplacementRate?: number;

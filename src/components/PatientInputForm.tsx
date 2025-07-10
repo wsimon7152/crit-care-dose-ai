@@ -135,14 +135,29 @@ export const PatientInputForm: React.FC<PatientInputFormProps> = ({ onSubmit, is
             {requiresCRRTDetails && (
               <>
                 <div className="space-y-2">
-                  <Label htmlFor="dialysateFlow">Dialysate Flow Rate (mL/kg/hr) *</Label>
-                  <Input
-                    id="dialysateFlow"
-                    type="number"
-                    required={requiresCRRTDetails}
-                    value={input.dialysateFlowRate || ''}
-                    onChange={(e) => setInput(prev => ({ ...prev, dialysateFlowRate: Number(e.target.value) || undefined }))}
-                  />
+                  <Label htmlFor="dialysateFlow">Dialysate Flow Rate *</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      id="dialysateFlow"
+                      type="number"
+                      required={requiresCRRTDetails}
+                      value={input.dialysateFlowRate || ''}
+                      onChange={(e) => setInput(prev => ({ ...prev, dialysateFlowRate: Number(e.target.value) || undefined }))}
+                      className="flex-1"
+                    />
+                    <Select 
+                      value={input.dialysateFlowRateUnit || 'ml/kg/hr'} 
+                      onValueChange={(value: 'ml/hr' | 'ml/kg/hr') => setInput(prev => ({ ...prev, dialysateFlowRateUnit: value }))}
+                    >
+                      <SelectTrigger className="w-32">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="ml/hr">mL/hr</SelectItem>
+                        <SelectItem value="ml/kg/hr">mL/kg/hr</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
 
                 <div className="space-y-2">
