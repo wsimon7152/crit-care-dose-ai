@@ -107,10 +107,61 @@ export class PKCalculationService {
       clearanceMultiplier *= Math.min(input.dialysateFlowRate / 25, 1.3); // Baseline 25 mL/kg/hr
     }
     
-    // Account for protein binding and sieving coefficient
-    const freeDisposition = 1 - pk.proteinBinding;
+    // Calculate protein binding adjustment with filter-specific considerations
+    const proteinBindingAdjustment = this.calculateProteinBindingAdjustment(
+      pk.proteinBinding, 
+      input.filterType || 'high-flux',
+      input.antibioticName
+    );
     
-    return baselineClearance * clearanceMultiplier * freeDisposition;
+    return baselineClearance * clearanceMultiplier * proteinBindingAdjustment;
+  }
+
+  private static calculateProteinBindingAdjustment(proteinBinding: number, filterType: string, drugName: string): number {
+    // Free fraction of drug
+    const freeFraction = 1 - proteinBinding;
+    
+    // Filter-specific sieving coefficients for different membrane types
+    const sievingCoefficients = this.getSievingCoefficient(filterType, drugName, proteinBinding);
+    
+    // For highly protein-bound drugs, filter type significantly impacts clearance
+    // For low protein binding drugs, effect is minimal
+    const filterImpact = proteinBinding > 0.8 ? sievingCoefficients.highBinding : sievingCoefficients.lowBinding;
+    
+    return freeFraction * filterImpact;
+  }
+
+  private static getSievingCoefficient(filterType: string, drugName: string, proteinBinding: number): { highBinding: number; lowBinding: number } {
+    // Sieving coefficients based on filter membrane characteristics
+    const coefficients: Record<string, { highBinding: number; lowBinding: number }> = {
+      'high-flux': { highBinding: 0.7, lowBinding: 0.95 },
+      'low-flux': { highBinding: 0.4, lowBinding: 0.85 },
+      'prismax-hf1000': { highBinding: 0.8, lowBinding: 0.98 },
+      'prismax-hf1400': { highBinding: 0.85, lowBinding: 0.98 },
+      'multifiltrate-aev1000': { highBinding: 0.75, lowBinding: 0.95 },
+      'multifiltrate-aev600': { highBinding: 0.7, lowBinding: 0.92 },
+      'fresenius-hf1000': { highBinding: 0.72, lowBinding: 0.94 },
+      'fresenius-hf1400': { highBinding: 0.78, lowBinding: 0.96 },
+      'baxter-st100': { highBinding: 0.68, lowBinding: 0.93 },
+      'baxter-st150': { highBinding: 0.73, lowBinding: 0.95 }
+    };
+
+    // Drug-specific adjustments for certain antibiotics
+    const drugSpecificAdjustments: Record<string, number> = {
+      'vancomycin': 0.9,  // Lower protein binding, higher sieving
+      'teicoplanin': 0.6,  // High protein binding, lower sieving
+      'ceftazidime': 0.95, // Low protein binding
+      'meropenem': 0.92,   // Low protein binding
+      'piperacillintazobactam': 0.88 // Moderate protein binding
+    };
+
+    const baseCoefficients = coefficients[filterType] || coefficients['high-flux'];
+    const drugAdjustment = drugSpecificAdjustments[drugName.toLowerCase().replace(/[-\s]/g, '')] || 1;
+
+    return {
+      highBinding: baseCoefficients.highBinding * drugAdjustment,
+      lowBinding: baseCoefficients.lowBinding * drugAdjustment
+    };
   }
 
   private static calculatePercentTimeAboveMIC(dose: number, vd: number, ke: number, mic: number, interval: number): number {
