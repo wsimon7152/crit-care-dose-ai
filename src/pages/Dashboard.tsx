@@ -50,10 +50,28 @@ export const Dashboard = () => {
       
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         <Tabs defaultValue="dosing" className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="dosing">Dosing Calculator</TabsTrigger>
-            <TabsTrigger value="research">Research Management</TabsTrigger>
-            <TabsTrigger value="settings">API Settings</TabsTrigger>
+          <TabsList className="grid w-full grid-cols-1 sm:grid-cols-3 h-auto">
+            <TabsTrigger 
+              value="dosing" 
+              className="text-center whitespace-normal leading-tight py-3 px-2 h-auto min-h-[3rem]"
+            >
+              <span className="block">Dosing</span>
+              <span className="block">Calculator</span>
+            </TabsTrigger>
+            <TabsTrigger 
+              value="research" 
+              className="text-center whitespace-normal leading-tight py-3 px-2 h-auto min-h-[3rem]"
+            >
+              <span className="block">Research</span>
+              <span className="block">Management</span>
+            </TabsTrigger>
+            <TabsTrigger 
+              value="settings" 
+              className="text-center whitespace-normal leading-tight py-3 px-2 h-auto min-h-[3rem]"
+            >
+              <span className="block">API</span>
+              <span className="block">Settings</span>
+            </TabsTrigger>
           </TabsList>
           
           <TabsContent value="dosing" className="space-y-6">
