@@ -1,5 +1,4 @@
 import { ApiKeyConfig } from '../types';
-import * as pdfjsLib from 'pdfjs-dist';
 
 export class StudyAnalysisService {
   /**
@@ -175,10 +174,13 @@ Instructions:
   }
 
   /**
-   * Extract text from PDF using pdfjs-dist (browser-compatible)
+   * Extract text from PDF using dynamic import for better compatibility
    */
   static async extractTextFromPDF(file: File): Promise<string> {
     try {
+      // Dynamic import for better browser compatibility
+      const pdfjsLib = await import('pdfjs-dist');
+      
       // Set worker source for pdfjs
       pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://unpkg.com/pdfjs-dist@4.0.379/build/pdf.worker.min.js';
       

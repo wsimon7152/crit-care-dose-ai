@@ -19,4 +19,12 @@ export default defineConfig(({ mode }) => ({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  build: {
+    target: 'es2022', // Support modern features including top-level await
+    rollupOptions: {
+      output: {
+        format: 'es'
+      }
+    }
+  }
 }));
