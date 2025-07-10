@@ -20,6 +20,7 @@ export interface PatientInput {
   age?: number;
   gender?: 'male' | 'female';
   weight?: number;
+  serumCreatinine?: number;
   liverDisease: boolean;
   heartDisease: boolean;
   heartFailure: boolean;

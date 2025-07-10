@@ -78,6 +78,18 @@ export const PatientInputForm: React.FC<PatientInputFormProps> = ({ onSubmit, is
               />
             </div>
 
+            <div className="space-y-2">
+              <Label htmlFor="serumCreatinine">Serum Creatinine (mg/dL)</Label>
+              <Input
+                id="serumCreatinine"
+                type="number"
+                step="0.1"
+                placeholder="1.0-2.5 (typical for elderly)"
+                value={input.serumCreatinine || ''}
+                onChange={(e) => setInput(prev => ({ ...prev, serumCreatinine: Number(e.target.value) || undefined }))}
+              />
+            </div>
+
             {/* CRRT Parameters */}
             <div className="space-y-2">
               <div className="flex items-center gap-2">
