@@ -3,6 +3,35 @@ import { drugProfiles } from '../data/drugProfiles';
 import { StudyVerificationService } from './studyVerification';
 import { ResearchIntegrationService } from './researchIntegration';
 
+/**
+ * PKCalculationService - Enhanced to use most available patient inputs
+ * 
+ * INPUTS NOW USED:
+ * - age: Age-based PK adjustments (elderly considerations)
+ * - gender: Gender-based volume of distribution adjustments  
+ * - weight: Volume calculations and dialysate flow normalization
+ * - serumCreatinine: eGFR calculation for residual renal function
+ * - liverDisease: Hepatic clearance adjustments
+ * - heartDisease: Cardiac output and distribution effects
+ * - heartFailure: Severe cardiovascular impact on PK
+ * - dialysateFlowRate: CRRT efficiency calculations
+ * - dialysateFlowRateUnit: Proper unit conversion for flow rates
+ * - bloodFlowRate: CRRT flow multiplier calculations
+ * - preFilterReplacementRate: Blood dilution effects on clearance
+ * - postFilterReplacementRate: Replacement fluid impact
+ * - ultrafiltrationRate: Blood concentration effects
+ * - ecmoTreatment: Volume of distribution adjustments
+ * - antibioticName: Drug-specific PK parameters
+ * - mic: %T>MIC calculations for efficacy
+ * - crrtModality: Modality-specific clearance adjustments (CVVH/CVVHD/CVVHDF)
+ * - filterType: Membrane-specific sieving coefficients
+ * 
+ * INPUTS STILL UNUSED (no practical pharmacokinetic impact):
+ * - microbiologicalCulture: Text field for clinical reference only
+ * - infectionType: Clinical descriptor, doesn't affect PK calculations  
+ * - sourceOfInfection: Clinical descriptor, doesn't affect PK calculations
+ */
+
 export class PKCalculationService {
   static calculatePKMetrics(input: PatientInput): PKResult {
     // Normalize the drug name to match drugProfiles keys
@@ -22,17 +51,53 @@ export class PKCalculationService {
       input.antibioticName, 
       input
     );
-    const pk = adjustedPK;
+    let pk = { ...adjustedPK };
     
     // Patient weight (use 70kg as default if not provided)
     const patientWeight = input.weight || 70;
     
+    // Age-based adjustments (elderly patients may have altered PK)
+    if (input.age && input.age >= 65) {
+      pk.crrtClearance *= 0.85; // 15% reduction in clearance for elderly
+      pk.volumeOfDistribution *= input.age >= 80 ? 0.9 : 0.95; // Further reduction for very elderly
+    }
+    
+    // Gender-based adjustments (women typically have different body composition)
+    if (input.gender === 'female') {
+      pk.volumeOfDistribution *= 0.9; // Lower muscle mass, different fat distribution
+    }
+    
+    // Serum creatinine-based renal function assessment
+    let estimatedGFR = 0;
+    if (input.serumCreatinine && input.age) {
+      // Cockcroft-Gault equation for eGFR
+      const genderMultiplier = input.gender === 'female' ? 0.85 : 1;
+      estimatedGFR = ((140 - input.age) * patientWeight * genderMultiplier) / (72 * input.serumCreatinine);
+    }
+    
     // Calculate CRRT clearance with detailed breakdown
     const crrtCalculations = this.calculateCRRTClearanceDetailed(input, pk);
     
-    // Calculate hepatic and renal clearance
-    const hepaticClearance = input.liverDisease ? pk.crrtClearance * 0.5 : pk.crrtClearance * 0.8;
-    const residualRenalClearance = 0.1; // Assume minimal residual renal function in CRRT patients
+    // Calculate hepatic clearance with heart disease considerations
+    let hepaticClearance = input.liverDisease ? pk.crrtClearance * 0.5 : pk.crrtClearance * 0.8;
+    
+    // Heart disease affects cardiac output and drug distribution
+    if (input.heartDisease) {
+      hepaticClearance *= 0.8; // Reduced hepatic blood flow
+      pk.volumeOfDistribution *= 1.1; // Increased Vd due to poor perfusion
+    }
+    
+    // Heart failure has more severe impact
+    if (input.heartFailure) {
+      hepaticClearance *= 0.6; // Severely reduced hepatic clearance
+      pk.volumeOfDistribution *= 1.2; // Significantly increased Vd
+    }
+    
+    // Calculate residual renal clearance based on eGFR if available
+    let residualRenalClearance = 0.1; // Default minimal function
+    if (estimatedGFR > 0) {
+      residualRenalClearance = Math.min(estimatedGFR / 100, 0.3); // Cap at 30% of normal
+    }
     
     // Calculate total clearance (CRRT + hepatic + residual renal)
     const totalClearance = crrtCalculations.adjustedClearance + hepaticClearance + residualRenalClearance;
@@ -129,6 +194,7 @@ export class PKCalculationService {
     filterEfficiency: string;
   } {
     const baselineClearance = pk.crrtClearance;
+    const patientWeight = input.weight || 70;
     
     // Calculate flow multiplier based on CRRT settings
     let flowMultiplier = 1;
@@ -137,8 +203,53 @@ export class PKCalculationService {
       flowMultiplier *= Math.min(input.bloodFlowRate / 150, 1.5); // Baseline 150 mL/min
     }
     
+    // Handle dialysate flow rate with unit conversion
     if (input.dialysateFlowRate) {
-      flowMultiplier *= Math.min(input.dialysateFlowRate / 25, 1.3); // Baseline 25 mL/kg/hr
+      let dialysateFlowNormalized = input.dialysateFlowRate;
+      
+      // Convert to mL/kg/hr if it's in mL/hr
+      if (input.dialysateFlowRateUnit === 'ml/hr') {
+        dialysateFlowNormalized = input.dialysateFlowRate / patientWeight;
+      }
+      
+      flowMultiplier *= Math.min(dialysateFlowNormalized / 25, 1.3); // Baseline 25 mL/kg/hr
+    }
+    
+    // CRRT modality-specific adjustments
+    let modalityMultiplier = 1;
+    if (input.crrtModality) {
+      switch (input.crrtModality) {
+        case 'CVVH':
+          modalityMultiplier = 1.0; // Convection-based, baseline
+          break;
+        case 'CVVHD':
+          modalityMultiplier = 0.9; // Diffusion-based, slightly lower for small molecules
+          break;
+        case 'CVVHDF':
+          modalityMultiplier = 1.1; // Combined modality, higher efficiency
+          break;
+      }
+    }
+    
+    // Pre-filter replacement rate impact (dilutes blood concentration)
+    let preFilterEffect = 1;
+    if (input.preFilterReplacementRate && input.bloodFlowRate) {
+      const dilutionRatio = input.preFilterReplacementRate / input.bloodFlowRate;
+      preFilterEffect = 1 - (dilutionRatio * 0.1); // 10% reduction per 100% dilution ratio
+    }
+    
+    // Post-filter replacement rate impact (minimal direct effect on clearance)
+    let postFilterEffect = 1;
+    if (input.postFilterReplacementRate && input.bloodFlowRate) {
+      const replacementRatio = input.postFilterReplacementRate / input.bloodFlowRate;
+      postFilterEffect = 1 + (replacementRatio * 0.05); // 5% increase per 100% replacement ratio
+    }
+    
+    // Ultrafiltration rate impact (concentrates blood, minor effect)
+    let ultrafiltrationEffect = 1;
+    if (input.ultrafiltrationRate && input.bloodFlowRate) {
+      const ufRatio = input.ultrafiltrationRate / input.bloodFlowRate;
+      ultrafiltrationEffect = 1 + (ufRatio * 0.02); // 2% increase per 100% UF ratio
     }
     
     // Calculate protein binding adjustment with filter-specific considerations
@@ -156,7 +267,10 @@ export class PKCalculationService {
     const filterEfficiency = sievingCoefficient > 0.9 ? 'High efficiency' : 
                            sievingCoefficient > 0.7 ? 'Moderate efficiency' : 'Lower efficiency';
     
-    const adjustedClearance = baselineClearance * flowMultiplier * proteinBindingAdjustment;
+    // Apply all multipliers to calculate final adjusted clearance
+    const adjustedClearance = baselineClearance * flowMultiplier * modalityMultiplier * 
+                             preFilterEffect * postFilterEffect * ultrafiltrationEffect * 
+                             proteinBindingAdjustment;
     
     return {
       adjustedClearance,
