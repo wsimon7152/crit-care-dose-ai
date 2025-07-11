@@ -46,6 +46,7 @@ export interface PKParameters {
   volumeOfDistribution: number;
   proteinBinding: number;
   crrtClearance: number;
+  hepaticClearance?: number;
   halfLife: number;
 }
 
@@ -59,6 +60,12 @@ export interface PKResult {
   evidenceAlerts?: string[];
   supportingStudies?: Research[];
   citationText?: string;
+  evidenceSources?: {
+    volumeOfDistribution: string;
+    clearance: string;
+    sievingCoefficient: string;
+    proteinBinding: string;
+  };
   calculationDetails?: {
     patientWeight: number;
     crrtClearance: number;

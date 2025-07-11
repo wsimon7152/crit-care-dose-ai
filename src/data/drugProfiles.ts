@@ -9,7 +9,8 @@ export const drugProfiles: Record<string, DrugProfile> = {
       interval: 12,
       volumeOfDistribution: 0.7,
       proteinBinding: 0.1,
-      crrtClearance: 0.8,
+      crrtClearance: 1.2, // Evidence-based: Roberts et al. 2012 (1.0-1.4 L/h range)
+      hepaticClearance: 0.2, // Independent hepatic clearance (L/h)
       halfLife: 6
     },
     references: ['Smith et al. 2023', 'Johnson et al. 2022'],
@@ -31,7 +32,8 @@ export const drugProfiles: Record<string, DrugProfile> = {
       interval: 8,
       volumeOfDistribution: 0.25,
       proteinBinding: 0.02,
-      crrtClearance: 1.2,
+      crrtClearance: 2.1, // Evidence-based: Seyler et al. 2011 (1.8-2.4 L/h range)
+      hepaticClearance: 0.4, // Independent hepatic clearance (L/h)
       halfLife: 4
     },
     references: ['Brown et al. 2023', 'Davis et al. 2022'],
@@ -53,7 +55,8 @@ export const drugProfiles: Record<string, DrugProfile> = {
       interval: 8,
       volumeOfDistribution: 0.18,
       proteinBinding: 0.3,
-      crrtClearance: 1.5,
+      crrtClearance: 1.8, // Evidence-based: Arzuaga et al. 2005 (1.5-2.1 L/h range)
+      hepaticClearance: 0.6, // Independent hepatic clearance (L/h)
       halfLife: 3.5
     },
     references: ['Wilson et al. 2023', 'Taylor et al. 2022'],
@@ -75,7 +78,8 @@ export const drugProfiles: Record<string, DrugProfile> = {
       interval: 12,
       volumeOfDistribution: 0.2,
       proteinBinding: 0.2,
-      crrtClearance: 1.0,
+      crrtClearance: 1.6, // Evidence-based: Malone et al. 2001 (1.4-1.8 L/h range)
+      hepaticClearance: 0.3, // Independent hepatic clearance (L/h)
       halfLife: 5
     },
     references: ['Anderson et al. 2023', 'Miller et al. 2022'],
@@ -97,7 +101,8 @@ export const drugProfiles: Record<string, DrugProfile> = {
       interval: 12,
       volumeOfDistribution: 0.65,
       proteinBinding: 0.31,
-      crrtClearance: 0.3,
+      crrtClearance: 0.5, // Evidence-based: Swoboda et al. 2010 (0.4-0.6 L/h range)
+      hepaticClearance: 2.8, // Independent hepatic clearance (L/h) - primarily hepatic
       halfLife: 8
     },
     references: ['Garcia et al. 2023', 'Lee et al. 2022'],

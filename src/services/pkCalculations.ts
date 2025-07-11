@@ -78,8 +78,11 @@ export class PKCalculationService {
     // Calculate CRRT clearance with detailed breakdown
     const crrtCalculations = this.calculateCRRTClearanceDetailed(input, pk);
     
-    // Calculate hepatic clearance with heart disease considerations
-    let hepaticClearance = input.liverDisease ? pk.crrtClearance * 0.5 : pk.crrtClearance * 0.8;
+    // Calculate hepatic clearance - independent from CRRT clearance
+    let hepaticClearance = pk.hepaticClearance || 0.3; // Use drug-specific hepatic clearance
+    if (input.liverDisease) {
+      hepaticClearance *= 0.5; // Reduced hepatic function
+    }
     
     // Heart disease affects cardiac output and drug distribution
     if (input.heartDisease) {
@@ -145,6 +148,21 @@ export class PKCalculationService {
       input
     );
     
+    // Generate TDM recommendations
+    const tdmRecommendations = this.generateTDMRecommendations(
+      input.antibioticName,
+      auc024,
+      percentTimeAboveMic,
+      eliminationRate,
+      totalClearance
+    );
+    
+    // Merge TDM recommendations with evidence alerts
+    const allAlerts = [...evidenceAlerts, ...tdmRecommendations];
+    
+    // Generate evidence sources for transparency
+    const evidenceSources = this.generateEvidenceSources(input.antibioticName, crrtCalculations);
+    
     return {
       totalClearance,
       auc024,
@@ -152,9 +170,10 @@ export class PKCalculationService {
       doseRecommendation: doseRecommendation.dose,
       rationale: doseRecommendation.rationale,
       concentrationCurve,
-      evidenceAlerts,
+      evidenceAlerts: allAlerts,
       supportingStudies: citations.supportingStudies,
       citationText: citations.citationText,
+      evidenceSources,
       calculationDetails: {
         patientWeight,
         crrtClearance: crrtCalculations.adjustedClearance,
@@ -434,5 +453,143 @@ export class PKCalculationService {
     console.log('Research-integrated AI prompt:', researchPrompt);
     
     return researchPrompt;
+  }
+
+  private static generateTDMRecommendations(
+    drugName: string,
+    auc024: number,
+    percentTimeAboveMic: number,
+    eliminationRate: number,
+    totalClearance: number
+  ): string[] {
+    const recommendations: string[] = [];
+    const halfLife = Math.log(2) / eliminationRate;
+
+    // Drug-specific toxicity thresholds and targets
+    const drugTargets: Record<string, {
+      aucToxicity?: number;
+      aucTarget?: { min: number; max: number };
+      timeMicTarget?: number;
+      troughTarget?: { min: number; max: number };
+    }> = {
+      vancomycin: {
+        aucToxicity: 700,
+        aucTarget: { min: 400, max: 600 },
+        troughTarget: { min: 15, max: 20 }
+      },
+      meropenem: {
+        aucToxicity: 2000,
+        timeMicTarget: 40,
+      },
+      piperacillintazobactam: {
+        aucToxicity: 1800,
+        timeMicTarget: 50,
+      },
+      cefepime: {
+        aucToxicity: 1500,
+        timeMicTarget: 60,
+      },
+      linezolid: {
+        aucToxicity: 400,
+        aucTarget: { min: 200, max: 350 }
+      }
+    };
+
+    const normalizedDrugName = drugName.toLowerCase().replace(/[-\s]/g, '');
+    const targets = drugTargets[normalizedDrugName];
+
+    if (!targets) return recommendations;
+
+    // AUC-based toxicity alerts
+    if (targets.aucToxicity && auc024 > targets.aucToxicity) {
+      recommendations.push(`⚠️ AUC₀₋₂₄ (${auc024.toFixed(0)} mg·h/L) exceeds toxicity threshold (${targets.aucToxicity} mg·h/L) - consider dose reduction and TDM`);
+    }
+
+    // AUC target range recommendations
+    if (targets.aucTarget) {
+      if (auc024 < targets.aucTarget.min) {
+        recommendations.push(`🎯 AUC₀₋₂₄ (${auc024.toFixed(0)} mg·h/L) below target range (${targets.aucTarget.min}-${targets.aucTarget.max} mg·h/L) - consider dose increase`);
+      } else if (auc024 > targets.aucTarget.max) {
+        recommendations.push(`🎯 AUC₀₋₂₄ (${auc024.toFixed(0)} mg·h/L) above target range (${targets.aucTarget.min}-${targets.aucTarget.max} mg·h/L) - consider dose reduction`);
+      }
+    }
+
+    // Time above MIC recommendations for time-dependent antibiotics
+    if (targets.timeMicTarget && percentTimeAboveMic < targets.timeMicTarget) {
+      recommendations.push(`⏰ %T>MIC (${percentTimeAboveMic.toFixed(1)}%) below target (${targets.timeMicTarget}%) - consider dose optimization or extended infusion`);
+    }
+
+    // Half-life based TDM recommendations
+    if (halfLife > 8) {
+      recommendations.push(`📊 Prolonged half-life (${halfLife.toFixed(1)} hours) detected - recommend TDM to guide therapy`);
+    }
+
+    // Special recommendations for vancomycin
+    if (normalizedDrugName === 'vancomycin') {
+      recommendations.push(`🩸 Recommend trough monitoring before 4th dose and AUC calculation for optimal dosing`);
+    }
+
+    // Special recommendations for linezolid
+    if (normalizedDrugName === 'linezolid') {
+      if (halfLife > 12) {
+        recommendations.push(`⚠️ Extended linezolid half-life suggests accumulation risk - monitor for peripheral neuropathy and thrombocytopenia`);
+      }
+    }
+
+    return recommendations;
+  }
+
+  private static generateEvidenceSources(drugName: string, crrtCalculations: any): {
+    volumeOfDistribution: string;
+    clearance: string;
+    sievingCoefficient: string;
+    proteinBinding: string;
+  } {
+    // Evidence-based sources for each drug parameter
+    const drugSources: Record<string, {
+      volumeOfDistribution: string;
+      clearance: string;
+      proteinBinding: string;
+    }> = {
+      vancomycin: {
+        volumeOfDistribution: "Roberts et al., 2012 (0.7 L/kg)",
+        clearance: "Roberts et al., 2012 (1.0-1.4 L/h CRRT)",
+        proteinBinding: "Rybak et al., 2020 (10% binding)"
+      },
+      meropenem: {
+        volumeOfDistribution: "Seyler et al., 2011 (0.25 L/kg)",
+        clearance: "Seyler et al., 2011 (1.8-2.4 L/h CRRT)",
+        proteinBinding: "Thalhammer et al., 1997 (2% binding)"
+      },
+      piperacillintazobactam: {
+        volumeOfDistribution: "Arzuaga et al., 2005 (0.18 L/kg)",
+        clearance: "Arzuaga et al., 2005 (1.5-2.1 L/h CRRT)",
+        proteinBinding: "Valtonen et al., 2001 (30% binding)"
+      },
+      cefepime: {
+        volumeOfDistribution: "Malone et al., 2001 (0.2 L/kg)",
+        clearance: "Malone et al., 2001 (1.4-1.8 L/h CRRT)",
+        proteinBinding: "Barbhaiya et al., 1992 (20% binding)"
+      },
+      linezolid: {
+        volumeOfDistribution: "Swoboda et al., 2010 (0.65 L/kg)",
+        clearance: "Swoboda et al., 2010 (0.4-0.6 L/h CRRT)",
+        proteinBinding: "Stalker et al., 2003 (31% binding)"
+      }
+    };
+
+    const normalizedDrugName = drugName.toLowerCase().replace(/[-\s]/g, '');
+    const sources = drugSources[normalizedDrugName] || {
+      volumeOfDistribution: "Standard pharmacokinetic references",
+      clearance: "Population PK estimates",
+      proteinBinding: "Standard pharmacokinetic references"
+    };
+
+    return {
+      volumeOfDistribution: sources.volumeOfDistribution,
+      clearance: sources.clearance,
+      sievingCoefficient: `Filter manufacturer data and Adcock et al., 2017 (efficiency: ${crrtCalculations.filterEfficiency})`,
+      proteinBinding: sources.proteinBinding
+    };
   }
 }

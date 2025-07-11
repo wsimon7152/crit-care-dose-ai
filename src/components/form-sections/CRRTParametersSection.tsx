@@ -72,7 +72,7 @@ export const CRRTParametersSection: React.FC<CRRTParametersSectionProps> = ({ in
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="preFilter">Pre-filter Replacement (mL/hr) *</Label>
+            <Label htmlFor="preFilter">Pre-filter Replacement Rate (mL/hr) *</Label>
             <Input
               id="preFilter"
               type="number"
@@ -83,7 +83,7 @@ export const CRRTParametersSection: React.FC<CRRTParametersSectionProps> = ({ in
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="postFilter">Post-filter Replacement (mL/hr) *</Label>
+            <Label htmlFor="postFilter">Post-filter Replacement Rate (mL/hr) *</Label>
             <Input
               id="postFilter"
               type="number"
