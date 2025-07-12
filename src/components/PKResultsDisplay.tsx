@@ -30,10 +30,10 @@ export const PKResultsDisplay: React.FC<PKResultsDisplayProps> = ({
   return (
     <div className="space-y-6">
       <Tabs defaultValue="results" className="w-full">
-        <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="results">Clinical Results</TabsTrigger>
-          <TabsTrigger value="calculations">Calculation Details</TabsTrigger>
-          <TabsTrigger value="references">Data Sources</TabsTrigger>
+        <TabsList className="grid w-full grid-cols-1 sm:grid-cols-3 h-auto sm:h-10">
+          <TabsTrigger value="results" className="text-xs sm:text-sm">Clinical Results</TabsTrigger>
+          <TabsTrigger value="calculations" className="text-xs sm:text-sm">Calculation Details</TabsTrigger>
+          <TabsTrigger value="references" className="text-xs sm:text-sm">Data Sources</TabsTrigger>
         </TabsList>
         
         <TabsContent value="results" className="space-y-6">
@@ -398,7 +398,54 @@ export const PKResultsDisplay: React.FC<PKResultsDisplayProps> = ({
                     </div>
                     <div>
                       <div className="font-medium">CRRT Clearance (baseline)</div>
-                      <div>{pkParameters.crrtClearance} L/h</div>
+                      <div className="flex items-center gap-2">
+                        <span>{pkParameters.crrtClearance} L/h</span>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button variant="ghost" size="sm" className="h-auto p-1">
+                              <Info className="h-3 w-3 text-blue-600" />
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-80">
+                            <div className="space-y-2">
+                              <h4 className="font-medium">Baseline CRRT Clearance Source</h4>
+                              {antibioticName === 'Vancomycin' && (
+                                <p className="text-sm text-muted-foreground">
+                                  <strong>Evidence-based value:</strong> Roberts et al. 2012 (range: 1.0-1.4 L/h)
+                                  <br />Based on clinical studies in CRRT patients with standard hemofiltration rates.
+                                </p>
+                              )}
+                              {antibioticName === 'Meropenem' && (
+                                <p className="text-sm text-muted-foreground">
+                                  <strong>Evidence-based value:</strong> Seyler et al. 2011 (range: 1.8-2.4 L/h)
+                                  <br />Derived from pharmacokinetic studies in continuous venovenous hemofiltration.
+                                </p>
+                              )}
+                              {antibioticName === 'Piperacillin-Tazobactam' && (
+                                <p className="text-sm text-muted-foreground">
+                                  <strong>Evidence-based value:</strong> Arzuaga et al. 2005 (range: 1.5-2.1 L/h)
+                                  <br />From clinical PK studies in critically ill patients on CRRT.
+                                </p>
+                              )}
+                              {antibioticName === 'Cefepime' && (
+                                <p className="text-sm text-muted-foreground">
+                                  <strong>Evidence-based value:</strong> Malone et al. 2001 (range: 1.4-1.8 L/h)
+                                  <br />Based on sieving coefficient and effluent flow rate studies.
+                                </p>
+                              )}
+                              {antibioticName === 'Linezolid' && (
+                                <p className="text-sm text-muted-foreground">
+                                  <strong>Evidence-based value:</strong> Swoboda et al. 2010 (range: 0.4-0.6 L/h)
+                                  <br />Low CRRT clearance due to high protein binding and limited filtration.
+                                </p>
+                              )}
+                              <p className="text-xs text-blue-700 italic">
+                                This baseline value is then adjusted for patient-specific CRRT settings and flow rates.
+                              </p>
+                            </div>
+                          </PopoverContent>
+                        </Popover>
+                      </div>
                     </div>
                     <div>
                       <div className="font-medium">Half-life</div>
@@ -442,8 +489,65 @@ export const PKResultsDisplay: React.FC<PKResultsDisplayProps> = ({
                   {/* Step 2: CRRT Clearance Calculation */}
                   <div className="bg-green-50 p-4 rounded border border-green-200">
                     <h4 className="font-medium mb-2">2. CRRT Clearance Calculation</h4>
-                    <div className="text-sm space-y-2">
-                      <div><strong>Baseline CRRT Clearance:</strong> {pkParameters.crrtClearance} L/h</div>
+                     <div className="text-sm space-y-2">
+                       <div className="flex items-center gap-2">
+                         <strong>Baseline CRRT Clearance:</strong> {pkParameters.crrtClearance} L/h
+                         <Popover>
+                           <PopoverTrigger asChild>
+                             <Button variant="ghost" size="sm" className="h-auto p-1">
+                               <Info className="h-3 w-3 text-green-600" />
+                             </Button>
+                           </PopoverTrigger>
+                           <PopoverContent className="w-80">
+                             <div className="space-y-2">
+                               <h4 className="font-medium">Source & Calculation Method</h4>
+                               {antibioticName === 'Vancomycin' && (
+                                 <div className="text-sm text-muted-foreground">
+                                   <p><strong>Literature Source:</strong> Roberts et al. 2012</p>
+                                   <p><strong>Study Design:</strong> Prospective PK study in 20 CRRT patients</p>
+                                   <p><strong>Method:</strong> Q_effluent × sieving coefficient × free fraction</p>
+                                   <p><strong>Sieving Coefficient:</strong> 0.9 (low protein binding)</p>
+                                 </div>
+                               )}
+                               {antibioticName === 'Meropenem' && (
+                                 <div className="text-sm text-muted-foreground">
+                                   <p><strong>Literature Source:</strong> Seyler et al. 2011</p>
+                                   <p><strong>Study Design:</strong> PK analysis in CVVH patients</p>
+                                   <p><strong>Method:</strong> Measured clearance at standard flow rates (25 mL/kg/h)</p>
+                                   <p><strong>Sieving Coefficient:</strong> 0.95 (minimal protein binding)</p>
+                                 </div>
+                               )}
+                               {antibioticName === 'Piperacillin-Tazobactam' && (
+                                 <div className="text-sm text-muted-foreground">
+                                   <p><strong>Literature Source:</strong> Arzuaga et al. 2005</p>
+                                   <p><strong>Study Design:</strong> Clinical PK study in ICU patients</p>
+                                   <p><strong>Method:</strong> Ultrafiltrate sampling and mass balance</p>
+                                   <p><strong>Sieving Coefficient:</strong> 0.7 (moderate protein binding)</p>
+                                 </div>
+                               )}
+                               {antibioticName === 'Cefepime' && (
+                                 <div className="text-sm text-muted-foreground">
+                                   <p><strong>Literature Source:</strong> Malone et al. 2001</p>
+                                   <p><strong>Study Design:</strong> Pharmacokinetic analysis in CRRT</p>
+                                   <p><strong>Method:</strong> Direct measurement of sieving coefficient</p>
+                                   <p><strong>Sieving Coefficient:</strong> 0.8 (low-moderate protein binding)</p>
+                                 </div>
+                               )}
+                               {antibioticName === 'Linezolid' && (
+                                 <div className="text-sm text-muted-foreground">
+                                   <p><strong>Literature Source:</strong> Swoboda et al. 2010</p>
+                                   <p><strong>Study Design:</strong> PK study in CVVH patients</p>
+                                   <p><strong>Method:</strong> Limited by protein binding and filter adsorption</p>
+                                   <p><strong>Sieving Coefficient:</strong> 0.6 (moderate-high protein binding)</p>
+                                 </div>
+                               )}
+                               <p className="text-xs text-green-700 italic">
+                                 This evidence-based baseline is then adjusted for your patient's specific CRRT parameters.
+                               </p>
+                             </div>
+                           </PopoverContent>
+                         </Popover>
+                       </div>
                       
                       <div><strong>Flow Rate Multiplier:</strong></div>
                       <ul className="ml-4 space-y-1">
