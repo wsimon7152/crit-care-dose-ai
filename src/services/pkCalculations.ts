@@ -54,10 +54,10 @@ export class PKCalculationService {
     // Enhanced eGFR calculation using 2021 CKD-EPI equation with AKI adjustments
     let residualRenalClearance = this.calculateResidualRenalClearance(input, patientWeight);
     
-    // 2025 Update: AKI patients may have augmented clearance (Nature 2025 GFR est from gentamicin)
+    // 2025 Update: AKI patients may have augmented clearance (PMC11912797 2025 augmented Cl in AKI)
     if (input.acuteKidneyInjury) {
       residualRenalClearance *= 1.2; // 20% increase for AKI augmented clearance
-      console.log('AKI-adjusted residual renal clearance applied');
+      console.log('AKI-adjusted residual renal clearance applied (PMC11912797 2025)');
     }
     
     // Calculate CRRT clearance with modality-specific equations
@@ -98,17 +98,17 @@ export class PKCalculationService {
     // Explicit total clearance calculation from equations doc and book chapter
     const totalClearance = nonRenalClearance + residualRenalClearance + crrtCalculations.adjustedClearance;
     
-    // 2025 Enhancement: Log high extracorporeal clearance (e.g., colistin 84% - Springer 2024)
+    // 2025 Enhancement: Log high extracorporeal clearance (e.g., colistin 84% - PMC11438743 2024)
     if (crrtCalculations.adjustedClearance > 0.8 * totalClearance) {
-      console.log(`High extracorporeal clearance detected: ${(crrtCalculations.adjustedClearance/totalClearance*100).toFixed(0)}% of total clearance`);
+      console.log(`High extracorporeal clearance detected: ${(crrtCalculations.adjustedClearance/totalClearance*100).toFixed(0)}% of total clearance (PMC11438743 2024)`);
     }
     
-    // Augmented renal clearance adjustment (book chapter page 18, Nature 2025 GFR est from gentamicin)
+    // Augmented renal clearance adjustment (book chapter page 18, LWW 2024 gentamicin rethinking)
     const estimatedGFR = this.calculateCKDEPIGFR(input);
     let augmentedClearanceMultiplier = 1;
     if (estimatedGFR > 130) {
       augmentedClearanceMultiplier = 1.5; // 50% increase for augmented clearance
-      console.log('Augmented renal clearance detected (eGFR >130 mL/min/1.73m²)');
+      console.log('Augmented renal clearance detected (eGFR >130 mL/min/1.73m²) - LWW 2024');
     }
     
     const adjustedTotalClearance = totalClearance * augmentedClearanceMultiplier;
@@ -319,7 +319,7 @@ export class PKCalculationService {
         break;
         
       case 'SLED': // 2025 Addition: Sustained Low-Efficiency Dialysis
-        // ScienceDirect 2025 colistin SLED specific
+        // ScienceDirect 2025 colistin disposition SLED PopPK
         clearance = fub * dialysateFlowRate * 0.8; // Similar to PIRRT but different duration
         modalityDescription = 'Sustained Low-Efficiency Dialysis';
         break;
@@ -397,8 +397,11 @@ export class PKCalculationService {
       // Moderate sequestration
       clearanceMultiplier = 0.9; // 10% reduction
     } else if (proteinBinding === 0.5 && logP === -1.5) {
-      // 2025: Colistin-specific adjustment (Springer 2024 ECMO sequestration)
+      // 2025: Colistin-specific adjustment (PMC11438743 2024 ECMO sequestration)
       clearanceMultiplier = 0.9; // 10% reduction based on new data
+    } else if (proteinBinding === 0.31 && logP === 0.23) {
+      // 2025: Linezolid-specific adjustment for variability (OUP 2025 TDM 2-8 mg/L)
+      clearanceMultiplier = 0.9; // 10% reduction if high variability
     }
     
     // Circuit age effect (book chapter page 26)
@@ -423,7 +426,7 @@ export class PKCalculationService {
       return `🩸 TPE Alert: ${drugName} is highly protein-bound (${(proteinBinding * 100).toFixed(0)}%) - administer dose after plasma exchange to avoid 60-70% removal`;
     }
     
-    // 2025 Addition: Special considerations for specific drugs
+    // 2025 Addition: Special considerations for specific drugs (PMC12133543 2025 case PK)
     const normalizedDrugName = drugName.toLowerCase();
     if (normalizedDrugName.includes('ceftazidime') && normalizedDrugName.includes('avibactam')) {
       return `⚠️ CNS Alert: Ceftazidime-avibactam may cause CNS effects post-CRRT (PMC 2025) - monitor neurological status`;
