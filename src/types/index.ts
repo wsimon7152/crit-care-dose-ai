@@ -36,8 +36,15 @@ export interface PatientInput {
   infectionType?: string;
   sourceOfInfection?: string;
   mic?: number;
-  crrtModality?: 'CVVH' | 'CVVHD' | 'CVVHDF';
+  crrtModality?: 'CVVH' | 'CVVHD' | 'CVVHDF' | 'PIRRT';
   filterType?: string;
+  dilutionMode?: 'pre' | 'post';
+  dosingMethod?: 'bolus' | 'infusion' | 'extravascular';
+  infusionDuration?: number;
+  infusionRate?: number;
+  tpeTreatment?: boolean;
+  circuitAge?: 'new' | 'used';
+  sepsis?: boolean;
 }
 
 export interface PKParameters {
@@ -47,7 +54,14 @@ export interface PKParameters {
   proteinBinding: number;
   crrtClearance: number;
   hepaticClearance?: number;
+  nonRenalClearance?: number;
   halfLife: number;
+  molecularWeight?: number;
+  fractionUnbound?: number;
+  logP?: number;
+  saltFactor?: number;
+  bioavailability?: number;
+  absorptionRateKa?: number;
 }
 
 export interface PKResult {
@@ -106,4 +120,10 @@ export interface DrugProfile {
   references: string[];
   micBreakpoints: Record<string, number>;
   dosingSuggestions: string[];
+  tdmTargets?: {
+    trough?: { min: number; max: number; unit: string };
+    peak?: { min: number; max: number; unit: string };
+    auc?: { min: number; max: number; unit: string };
+    percentTimeAboveMic?: { min: number; max: number };
+  };
 }

@@ -8,12 +8,18 @@ export const drugProfiles: Record<string, DrugProfile> = {
       standardDose: 1000,
       interval: 12,
       volumeOfDistribution: 0.7,
-      proteinBinding: 0.1,
+      proteinBinding: 0.5,
       crrtClearance: 1.2, // Evidence-based: Roberts et al. 2012 (1.0-1.4 L/h range)
       hepaticClearance: 0.2, // Independent hepatic clearance (L/h)
-      halfLife: 6
+      nonRenalClearance: 0.2,
+      halfLife: 6,
+      molecularWeight: 1485,
+      fractionUnbound: 0.5,
+      logP: -3.1,
+      saltFactor: 1.0,
+      bioavailability: 1.0
     },
-    references: ['Smith et al. 2023', 'Johnson et al. 2022'],
+    references: ['Roberts et al. 2012', 'Rybak et al. 2020'],
     micBreakpoints: {
       'MRSA': 2,
       'CoNS': 4,
@@ -23,7 +29,11 @@ export const drugProfiles: Record<string, DrugProfile> = {
       'Load with 25-30 mg/kg, then 15-20 mg/kg q12h',
       'Target trough 15-20 mg/L for serious infections',
       'Consider continuous infusion for hemodynamically unstable patients'
-    ]
+    ],
+    tdmTargets: {
+      trough: { min: 15, max: 20, unit: 'mg/L' },
+      auc: { min: 400, max: 600, unit: 'mg·h/L' }
+    }
   },
   meropenem: {
     name: 'Meropenem',

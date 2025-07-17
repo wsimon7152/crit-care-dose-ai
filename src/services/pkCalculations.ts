@@ -4,34 +4,18 @@ import { StudyVerificationService } from './studyVerification';
 import { ResearchIntegrationService } from './researchIntegration';
 
 /**
- * PKCalculationService - Enhanced to use most available patient inputs
+ * PKCalculationService - Enhanced with expert equations and book chapter guidance
+ * Based on: Equations document and Chapter 27: Drug Dosing in AKI and Extracorporeal Therapies by M. Joy et al.
  * 
- * INPUTS NOW USED:
- * - age: Age-based PK adjustments (elderly considerations)
- * - gender: Gender-based volume of distribution adjustments  
- * - weight: Volume calculations and dialysate flow normalization
- * - serumCreatinine: eGFR calculation for residual renal function
- * - liverDisease: Hepatic clearance adjustments
- * - heartDisease: Cardiac output and distribution effects
- * - heartFailure: Severe cardiovascular impact on PK
- * - dialysateFlowRate: CRRT efficiency calculations
- * - dialysateFlowRateUnit: Proper unit conversion for flow rates
- * - bloodFlowRate: CRRT flow multiplier calculations
- * - preFilterReplacementRate: Blood dilution effects on clearance
- * - postFilterReplacementRate: Replacement fluid impact
- * - ultrafiltrationRate: Blood concentration effects
- * - ecmoTreatment: Volume of distribution adjustments
- * - antibioticName: Drug-specific PK parameters
- * - mic: %T>MIC calculations for efficacy
- * - crrtModality: Modality-specific clearance adjustments (CVVH/CVVHD/CVVHDF)
- * - filterType: Membrane-specific sieving coefficients
- * 
- * INPUTS STILL UNUSED (no practical pharmacokinetic impact):
- * - microbiologicalCulture: Text field for clinical reference only
- * - infectionType: Clinical descriptor, doesn't affect PK calculations  
- * - sourceOfInfection: Clinical descriptor, doesn't affect PK calculations
+ * Key Updates:
+ * - 2021 CKD-EPI equation for eGFR calculation
+ * - Explicit total clearance = nonRenalClearance + residualRenalClearance + extracorporealClearance
+ * - Modality-specific CRRT clearance calculations (CVVH, CVVHD, CVVHDF, PIRRT)
+ * - Plasma concentration equations for bolus, infusion, and extravascular dosing
+ * - ECMO adjustments for volume of distribution and clearance
+ * - TPE considerations for highly protein-bound drugs
+ * - Enhanced evidence integration with literature references
  */
-
 export class PKCalculationService {
   static calculatePKMetrics(input: PatientInput): PKResult {
     // Normalize the drug name to match drugProfiles keys
@@ -67,54 +51,66 @@ export class PKCalculationService {
       pk.volumeOfDistribution *= 0.9; // Lower muscle mass, different fat distribution
     }
     
-    // Serum creatinine-based renal function assessment
-    let estimatedGFR = 0;
-    if (input.serumCreatinine && input.age) {
-      // Cockcroft-Gault equation for eGFR
-      const genderMultiplier = input.gender === 'female' ? 0.85 : 1;
-      estimatedGFR = ((140 - input.age) * patientWeight * genderMultiplier) / (72 * input.serumCreatinine);
-    }
+    // Enhanced eGFR calculation using 2021 CKD-EPI equation
+    const residualRenalClearance = this.calculateResidualRenalClearance(input, patientWeight);
     
-    // Calculate CRRT clearance with detailed breakdown
+    // Calculate CRRT clearance with modality-specific equations
     const crrtCalculations = this.calculateCRRTClearanceDetailed(input, pk);
     
-    // Calculate hepatic clearance - independent from CRRT clearance
-    let hepaticClearance = pk.hepaticClearance || 0.3; // Use drug-specific hepatic clearance
+    // Calculate non-renal clearance (replaces hepaticClearance for broader accuracy)
+    let nonRenalClearance = pk.nonRenalClearance || pk.hepaticClearance || 0.3;
+    
+    // AKI-specific adjustments from book chapter (page 17)
     if (input.liverDisease) {
-      hepaticClearance *= 0.5; // Reduced hepatic function
+      nonRenalClearance *= 0.7; // Reduced hepatic function in AKI
+    }
+    
+    // Sepsis reduces Phase I metabolism (book chapter page 17)
+    if (input.sepsis) {
+      nonRenalClearance *= 0.7; // Inflammation reduces metabolism
     }
     
     // Heart disease affects cardiac output and drug distribution
     if (input.heartDisease) {
-      hepaticClearance *= 0.8; // Reduced hepatic blood flow
+      nonRenalClearance *= 0.8; // Reduced hepatic blood flow
       pk.volumeOfDistribution *= 1.1; // Increased Vd due to poor perfusion
     }
     
     // Heart failure has more severe impact
     if (input.heartFailure) {
-      hepaticClearance *= 0.6; // Severely reduced hepatic clearance
+      nonRenalClearance *= 0.6; // Severely reduced hepatic clearance
       pk.volumeOfDistribution *= 1.2; // Significantly increased Vd
     }
     
-    // Calculate residual renal clearance based on eGFR if available
-    let residualRenalClearance = 0.1; // Default minimal function
-    if (estimatedGFR > 0) {
-      residualRenalClearance = Math.min(estimatedGFR / 100, 0.3); // Cap at 30% of normal
+    // Apply ECMO adjustments if present
+    if (input.ecmoTreatment) {
+      const ecmoAdjustments = this.calculateECMOAdjustments(pk, input.circuitAge);
+      pk.volumeOfDistribution *= ecmoAdjustments.volumeMultiplier;
+      nonRenalClearance *= ecmoAdjustments.clearanceMultiplier;
     }
     
-    // Calculate total clearance (CRRT + hepatic + residual renal)
-    const totalClearance = crrtCalculations.adjustedClearance + hepaticClearance + residualRenalClearance;
+    // Explicit total clearance calculation from equations doc and book chapter
+    const totalClearance = nonRenalClearance + residualRenalClearance + crrtCalculations.adjustedClearance;
+    
+    // Augmented renal clearance adjustment (book chapter page 18)
+    const estimatedGFR = this.calculateCKDEPIGFR(input);
+    let augmentedClearanceMultiplier = 1;
+    if (estimatedGFR > 130) {
+      augmentedClearanceMultiplier = 1.5; // 50% increase for augmented clearance
+    }
+    
+    const adjustedTotalClearance = totalClearance * augmentedClearanceMultiplier;
     
     // Calculate dosing parameters
     const dosesPerDay = 24 / pk.interval;
     const dailyDose = pk.standardDose * dosesPerDay;
     
     // Calculate AUC0-24
-    const auc024 = dailyDose / totalClearance;
+    const auc024 = dailyDose / adjustedTotalClearance;
     
     // Calculate volume of distribution and elimination rate
     const volumeOfDistribution = pk.volumeOfDistribution * patientWeight;
-    const eliminationRate = totalClearance / volumeOfDistribution;
+    const eliminationRate = adjustedTotalClearance / volumeOfDistribution;
     const initialConcentration = pk.standardDose / volumeOfDistribution;
     
     // Calculate %T>MIC if MIC is provided
@@ -125,22 +121,26 @@ export class PKCalculationService {
       percentTimeAboveMic = Math.min((timeToReachMIC / pk.interval) * 100, 100);
     }
     
-    // Generate concentration-time curve
+    // Generate concentration-time curve with dosing method consideration
     const concentrationCurve = this.generateConcentrationCurve(
       pk.standardDose, 
       volumeOfDistribution, 
       eliminationRate,
-      pk.interval
+      pk.interval,
+      input.dosingMethod || 'bolus',
+      input.infusionDuration,
+      input.infusionRate,
+      pk.absorptionRateKa
     );
     
-    // Generate dosing recommendation with research integration
+    // Generate dosing recommendation with enhanced factors
     const doseRecommendation = this.generateDoseRecommendation(input, drugProfile, percentTimeAboveMic);
     
     // Generate evidence alerts and citations
     const evidenceAlerts = ResearchIntegrationService.generateEvidenceAlerts(
       input.antibioticName, 
       input, 
-      { totalClearance, auc024, percentTimeAboveMic } as PKResult
+      { totalClearance: adjustedTotalClearance, auc024, percentTimeAboveMic } as PKResult
     );
     
     const citations = ResearchIntegrationService.generateStudyCitations(
@@ -154,17 +154,23 @@ export class PKCalculationService {
       auc024,
       percentTimeAboveMic,
       eliminationRate,
-      totalClearance
+      adjustedTotalClearance
     );
     
     // Merge TDM recommendations with evidence alerts
     const allAlerts = [...evidenceAlerts, ...tdmRecommendations];
     
-    // Generate evidence sources for transparency
+    // Add TPE considerations if applicable
+    if (input.tpeTreatment) {
+      const tpeAlert = this.generateTPEAlert(pk.proteinBinding, input.antibioticName);
+      if (tpeAlert) allAlerts.push(tpeAlert);
+    }
+    
+    // Generate enhanced evidence sources
     const evidenceSources = this.generateEvidenceSources(input.antibioticName, crrtCalculations);
     
     return {
-      totalClearance,
+      totalClearance: adjustedTotalClearance,
       auc024,
       percentTimeAboveMic,
       doseRecommendation: doseRecommendation.dose,
@@ -177,7 +183,7 @@ export class PKCalculationService {
       calculationDetails: {
         patientWeight,
         crrtClearance: crrtCalculations.adjustedClearance,
-        hepaticClearance,
+        hepaticClearance: nonRenalClearance,
         residualRenalClearance,
         flowMultiplier: crrtCalculations.flowMultiplier,
         proteinBindingAdjustment: crrtCalculations.proteinBindingAdjustment,
@@ -193,6 +199,270 @@ export class PKCalculationService {
     };
   }
 
+  /**
+   * Calculate residual renal clearance using 2021 CKD-EPI equation
+   * From equations doc page 1: eGFR = 142 × min(SCr/κ,1)^α × max(SCr/κ,1)^-1.200 × 0.9938^Age × 1.012 [if female]
+   */
+  private static calculateResidualRenalClearance(input: PatientInput, patientWeight: number): number {
+    if (!input.serumCreatinine || !input.age || !input.gender) {
+      console.warn('Missing required parameters for eGFR calculation, defaulting to minimal renal function');
+      return 0.1;
+    }
+
+    const egfr = this.calculateCKDEPIGFR(input);
+    
+    // Convert eGFR to residual renal clearance
+    // Cap at 30% of normal as per current logic, but note this may overestimate in AKI
+    const residualRenalClearance = Math.min(egfr / 100, 0.3);
+    
+    return residualRenalClearance;
+  }
+
+  /**
+   * Calculate eGFR using 2021 CKD-EPI equation
+   * Reference: Hsu et al., NEJM 2021; doi:10.1056/NEJMoa2103753
+   */
+  private static calculateCKDEPIGFR(input: PatientInput): number {
+    if (!input.serumCreatinine || !input.age || !input.gender) {
+      return 0;
+    }
+
+    const scr = input.serumCreatinine; // mg/dL
+    const age = input.age; // years
+    const isFemale = input.gender === 'female';
+    
+    // Constants based on gender
+    const kappa = isFemale ? 0.7 : 0.9;
+    const alpha = isFemale ? -0.241 : -0.302;
+    const genderMultiplier = isFemale ? 1.012 : 1.0;
+    
+    // Calculate eGFR using 2021 CKD-EPI equation
+    const eGFR = 142 *
+      Math.pow(Math.min(scr / kappa, 1), alpha) *
+      Math.pow(Math.max(scr / kappa, 1), -1.200) *
+      Math.pow(0.9938, age) *
+      genderMultiplier;
+    
+    return eGFR; // mL/min/1.73 m²
+  }
+
+  /**
+   * Enhanced CRRT clearance calculation with modality-specific equations
+   * Based on equations doc pages 1-2 and book chapter pages 11-12
+   */
+  private static calculateCRRTClearanceDetailed(input: PatientInput, pk: PKParameters): {
+    adjustedClearance: number;
+    flowMultiplier: number;
+    proteinBindingAdjustment: number;
+    sievingCoefficient: number;
+    filterEfficiency: string;
+  } {
+    const fub = pk.fractionUnbound || (1 - pk.proteinBinding); // Fraction unbound
+    const patientWeight = input.weight || 70;
+    
+    // Convert flows to L/h for consistency
+    const bloodFlowRate = (input.bloodFlowRate || 150) * 0.06; // mL/min to L/h
+    const dialysateFlowRate = this.normalizeFlowRate(input.dialysateFlowRate || 25, input.dialysateFlowRateUnit, patientWeight);
+    const ultrafiltrationRate = (input.ultrafiltrationRate || 0) * 0.001; // mL/h to L/h
+    const preReplacementRate = (input.preFilterReplacementRate || 0) * 0.001; // mL/h to L/h
+    const postReplacementRate = (input.postFilterReplacementRate || 0) * 0.001; // mL/h to L/h
+    
+    let clearance = 0;
+    let modalityDescription = '';
+    
+    // Modality-specific clearance calculations
+    switch (input.crrtModality) {
+      case 'CVVHD': // Diffusion only
+        clearance = fub * dialysateFlowRate;
+        modalityDescription = 'Continuous Venovenous Hemodialysis (diffusion)';
+        break;
+        
+      case 'CVVH': // Convection/UF only
+        if (input.dilutionMode === 'pre') {
+          // Pre-dilution: clearance = fub * Q_UF * [Q_blood / (Q_blood + Q_replacement)]
+          clearance = fub * ultrafiltrationRate * (bloodFlowRate / (bloodFlowRate + preReplacementRate));
+        } else {
+          // Post-dilution: clearance = fub * Q_UF
+          clearance = fub * ultrafiltrationRate;
+        }
+        modalityDescription = 'Continuous Venovenous Hemofiltration (convection)';
+        break;
+        
+      case 'CVVHDF': // Combined modality
+        if (input.dilutionMode === 'pre') {
+          // Pre-dilution: clearance = fub * (Q_dialysate + Q_UF * [Q_blood / (Q_blood + Q_replacement)])
+          clearance = fub * (dialysateFlowRate + ultrafiltrationRate * (bloodFlowRate / (bloodFlowRate + preReplacementRate)));
+        } else {
+          // Post-dilution: clearance = fub * (Q_dialysate + Q_UF)
+          clearance = fub * (dialysateFlowRate + ultrafiltrationRate);
+        }
+        modalityDescription = 'Continuous Venovenous Hemodiafiltration (combined)';
+        break;
+        
+      case 'PIRRT': // Prolonged Intermittent RRT
+        // Lower flows for PIRRT (book chapter page 5)
+        const pirrtDialysateFlow = Math.min(dialysateFlowRate, 0.3); // Cap at 300 mL/min
+        clearance = fub * pirrtDialysateFlow * 0.8; // Adjust for intermittent nature
+        modalityDescription = 'Prolonged Intermittent Renal Replacement Therapy';
+        break;
+        
+      default:
+        // Fallback to existing logic if modality not specified
+        clearance = pk.crrtClearance;
+        modalityDescription = 'Standard CRRT calculation';
+    }
+    
+    // Apply sieving coefficient modulation
+    const sievingData = this.getSievingCoefficient(input.filterType || 'high-flux', input.antibioticName, pk.proteinBinding);
+    const sievingCoefficient = pk.proteinBinding > 0.8 ? sievingData.highBinding : sievingData.lowBinding;
+    
+    // For highly protein-bound drugs (>80%), cap clearance (book chapter page 10)
+    if (pk.proteinBinding > 0.8) {
+      clearance *= 0.8; // Cap adjustment for highly bound drugs
+    }
+    
+    // Apply sieving coefficient
+    const finalClearance = clearance * sievingCoefficient;
+    
+    // Calculate flow multiplier for reporting
+    const flowMultiplier = finalClearance / (pk.crrtClearance || 1);
+    
+    // Determine filter efficiency
+    const filterEfficiency = sievingCoefficient > 0.9 ? 'High efficiency' :
+                            sievingCoefficient > 0.7 ? 'Moderate efficiency' : 'Lower efficiency';
+    
+    return {
+      adjustedClearance: finalClearance,
+      flowMultiplier,
+      proteinBindingAdjustment: sievingCoefficient,
+      sievingCoefficient,
+      filterEfficiency: `${filterEfficiency} (${modalityDescription})`
+    };
+  }
+
+  /**
+   * Normalize flow rate to L/h
+   */
+  private static normalizeFlowRate(flowRate: number, unit: string | undefined, patientWeight: number): number {
+    if (unit === 'ml/hr') {
+      return flowRate * 0.001; // mL/hr to L/h
+    } else {
+      // ml/kg/hr
+      return (flowRate * patientWeight) * 0.001; // mL/kg/hr to L/h
+    }
+  }
+
+  /**
+   * Calculate ECMO adjustments for volume of distribution and clearance
+   * Based on book chapter pages 23-27
+   */
+  private static calculateECMOAdjustments(pk: PKParameters, circuitAge?: string): {
+    volumeMultiplier: number;
+    clearanceMultiplier: number;
+  } {
+    const logP = pk.logP || 0; // Default to hydrophilic if not specified
+    const proteinBinding = pk.proteinBinding || 0;
+    
+    // Volume of distribution adjustment for lipophilic drugs
+    let volumeMultiplier = 1;
+    if (logP > 0) {
+      volumeMultiplier = 1.5; // 50% increase for lipophilic drugs
+    }
+    
+    // Sequestration effects based on protein binding and lipophilicity
+    let clearanceMultiplier = 1;
+    if (proteinBinding > 0.8 && logP > 2) {
+      // High sequestration for highly bound, lipophilic drugs
+      clearanceMultiplier = 0.3; // 70% reduction (e.g., fentanyl)
+    } else if (proteinBinding > 0.5 && logP > 1) {
+      // Moderate sequestration
+      clearanceMultiplier = 0.9; // 10% reduction
+    }
+    
+    // Circuit age effect (book chapter page 26)
+    if (circuitAge === 'used') {
+      clearanceMultiplier *= 0.9; // 10% reduction for used circuits
+    }
+    
+    return {
+      volumeMultiplier,
+      clearanceMultiplier
+    };
+  }
+
+  /**
+   * Generate TPE alert for highly protein-bound drugs
+   * Based on book chapter pages 21-23
+   */
+  private static generateTPEAlert(proteinBinding: number, drugName: string): string | null {
+    if (proteinBinding > 0.8) {
+      return `🩸 TPE Alert: ${drugName} is highly protein-bound (${(proteinBinding * 100).toFixed(0)}%) - administer dose after plasma exchange to avoid 60-70% removal`;
+    }
+    return null;
+  }
+
+  /**
+   * Enhanced concentration curve generation with multiple dosing methods
+   * Based on equations doc page 2 and book chapter page 20
+   */
+  private static generateConcentrationCurve(
+    dose: number, 
+    vd: number, 
+    ke: number, 
+    interval: number,
+    dosingMethod: string = 'bolus',
+    infusionDuration?: number,
+    infusionRate?: number,
+    absorptionRateKa?: number
+  ) {
+    const points = [];
+    
+    // Generate curve for 24 hours
+    for (let t = 0; t <= 24; t += 0.5) {
+      const cycleTime = t % interval;
+      let concentration = 0;
+      
+      switch (dosingMethod) {
+        case 'bolus':
+          // IV Bolus: Cp = dose / Vd * e^(-ke * t)
+          concentration = (dose / vd) * Math.exp(-ke * cycleTime);
+          break;
+          
+        case 'infusion':
+          const T = infusionDuration || 1; // Default 1 hour infusion
+          const Ko = infusionRate || (dose / T); // Infusion rate
+          
+          if (cycleTime <= T) {
+            // During infusion: Cp = Ko / Cl * [1 - e^(-ke * t)]
+            concentration = (Ko / (ke * vd)) * (1 - Math.exp(-ke * cycleTime));
+          } else {
+            // After infusion: Cp = Cp_at_T * e^(-ke * (t - T))
+            const cpAtT = (Ko / (ke * vd)) * (1 - Math.exp(-ke * T));
+            concentration = cpAtT * Math.exp(-ke * (cycleTime - T));
+          }
+          break;
+          
+        case 'extravascular':
+          const ka = absorptionRateKa || 1.5; // Default absorption rate
+          const F = 1; // Bioavailability (assume 100% if not specified)
+          
+          // Extravascular: Cp = [F * dose * Ka] / [Vd * (Ka - Ke)] * [e^(-ke * t) - e^(-ka * t)]
+          if (ka !== ke) {
+            concentration = (F * dose * ka) / (vd * (ka - ke)) * 
+                          (Math.exp(-ke * cycleTime) - Math.exp(-ka * cycleTime));
+          } else {
+            // Special case when ka = ke
+            concentration = (F * dose * ka * cycleTime / vd) * Math.exp(-ke * cycleTime);
+          }
+          break;
+      }
+      
+      points.push({ time: t, concentration: Math.max(0, concentration) });
+    }
+    
+    return points;
+  }
+
   private static normalizeDrugName(drugName: string): string {
     // Handle specific drug name mappings
     const drugNameMappings: Record<string, string> = {
@@ -203,125 +473,6 @@ export class PKCalculationService {
 
     const normalized = drugName.toLowerCase().replace(/[-\s]/g, '');
     return drugNameMappings[normalized] || normalized;
-  }
-
-  private static calculateCRRTClearanceDetailed(input: PatientInput, pk: PKParameters): {
-    adjustedClearance: number;
-    flowMultiplier: number;
-    proteinBindingAdjustment: number;
-    sievingCoefficient: number;
-    filterEfficiency: string;
-  } {
-    const baselineClearance = pk.crrtClearance;
-    const patientWeight = input.weight || 70;
-    
-    // Calculate flow multiplier based on CRRT settings
-    let flowMultiplier = 1;
-    
-    if (input.bloodFlowRate) {
-      flowMultiplier *= Math.min(input.bloodFlowRate / 150, 1.5); // Baseline 150 mL/min
-    }
-    
-    // Handle dialysate flow rate with unit conversion
-    if (input.dialysateFlowRate) {
-      let dialysateFlowNormalized = input.dialysateFlowRate;
-      
-      // Convert to mL/kg/hr if it's in mL/hr
-      if (input.dialysateFlowRateUnit === 'ml/hr') {
-        dialysateFlowNormalized = input.dialysateFlowRate / patientWeight;
-      }
-      
-      flowMultiplier *= Math.min(dialysateFlowNormalized / 25, 1.3); // Baseline 25 mL/kg/hr
-    }
-    
-    // CRRT modality-specific adjustments
-    let modalityMultiplier = 1;
-    if (input.crrtModality) {
-      switch (input.crrtModality) {
-        case 'CVVH':
-          modalityMultiplier = 1.0; // Convection-based, baseline
-          break;
-        case 'CVVHD':
-          modalityMultiplier = 0.9; // Diffusion-based, slightly lower for small molecules
-          break;
-        case 'CVVHDF':
-          modalityMultiplier = 1.1; // Combined modality, higher efficiency
-          break;
-      }
-    }
-    
-    // Pre-filter replacement rate impact (dilutes blood concentration)
-    let preFilterEffect = 1;
-    if (input.preFilterReplacementRate && input.bloodFlowRate) {
-      const dilutionRatio = input.preFilterReplacementRate / input.bloodFlowRate;
-      preFilterEffect = 1 - (dilutionRatio * 0.1); // 10% reduction per 100% dilution ratio
-    }
-    
-    // Post-filter replacement rate impact (minimal direct effect on clearance)
-    let postFilterEffect = 1;
-    if (input.postFilterReplacementRate && input.bloodFlowRate) {
-      const replacementRatio = input.postFilterReplacementRate / input.bloodFlowRate;
-      postFilterEffect = 1 + (replacementRatio * 0.05); // 5% increase per 100% replacement ratio
-    }
-    
-    // Ultrafiltration rate impact (concentrates blood, minor effect)
-    let ultrafiltrationEffect = 1;
-    if (input.ultrafiltrationRate && input.bloodFlowRate) {
-      const ufRatio = input.ultrafiltrationRate / input.bloodFlowRate;
-      ultrafiltrationEffect = 1 + (ufRatio * 0.02); // 2% increase per 100% UF ratio
-    }
-    
-    // Calculate protein binding adjustment with filter-specific considerations
-    const proteinBindingAdjustment = this.calculateProteinBindingAdjustment(
-      pk.proteinBinding, 
-      input.filterType || 'high-flux',
-      input.antibioticName
-    );
-    
-    // Get sieving coefficient for detailed reporting
-    const sievingData = this.getSievingCoefficient(input.filterType || 'high-flux', input.antibioticName, pk.proteinBinding);
-    const sievingCoefficient = pk.proteinBinding > 0.8 ? sievingData.highBinding : sievingData.lowBinding;
-    
-    // Determine filter efficiency category
-    const filterEfficiency = sievingCoefficient > 0.9 ? 'High efficiency' : 
-                           sievingCoefficient > 0.7 ? 'Moderate efficiency' : 'Lower efficiency';
-    
-    // Apply all multipliers to calculate final adjusted clearance
-    const adjustedClearance = baselineClearance * flowMultiplier * modalityMultiplier * 
-                             preFilterEffect * postFilterEffect * ultrafiltrationEffect * 
-                             proteinBindingAdjustment;
-    
-    return {
-      adjustedClearance,
-      flowMultiplier,
-      proteinBindingAdjustment,
-      sievingCoefficient,
-      filterEfficiency
-    };
-  }
-
-  private static calculateCRRTClearance(input: PatientInput, pk: PKParameters): number {
-    const baselineClearance = pk.crrtClearance;
-    
-    // Adjust based on CRRT settings
-    let clearanceMultiplier = 1;
-    
-    if (input.bloodFlowRate) {
-      clearanceMultiplier *= Math.min(input.bloodFlowRate / 150, 1.5); // Baseline 150 mL/min
-    }
-    
-    if (input.dialysateFlowRate) {
-      clearanceMultiplier *= Math.min(input.dialysateFlowRate / 25, 1.3); // Baseline 25 mL/kg/hr
-    }
-    
-    // Calculate protein binding adjustment with filter-specific considerations
-    const proteinBindingAdjustment = this.calculateProteinBindingAdjustment(
-      pk.proteinBinding, 
-      input.filterType || 'high-flux',
-      input.antibioticName
-    );
-    
-    return baselineClearance * clearanceMultiplier * proteinBindingAdjustment;
   }
 
   private static calculateProteinBindingAdjustment(proteinBinding: number, filterType: string, drugName: string): number {
@@ -339,7 +490,7 @@ export class PKCalculationService {
   }
 
   private static getSievingCoefficient(filterType: string, drugName: string, proteinBinding: number): { highBinding: number; lowBinding: number } {
-    // Sieving coefficients based on filter membrane characteristics
+    // Enhanced sieving coefficients with additional drug-specific data
     const coefficients: Record<string, { highBinding: number; lowBinding: number }> = {
       'high-flux': { highBinding: 0.7, lowBinding: 0.95 },
       'low-flux': { highBinding: 0.4, lowBinding: 0.85 },
@@ -353,13 +504,18 @@ export class PKCalculationService {
       'baxter-st150': { highBinding: 0.73, lowBinding: 0.95 }
     };
 
-    // Drug-specific adjustments for certain antibiotics
+    // Enhanced drug-specific adjustments from literature
     const drugSpecificAdjustments: Record<string, number> = {
-      'vancomycin': 0.9,  // Lower protein binding, higher sieving
+      'vancomycin': 0.9,  // SC 0.7-0.9 from literature
       'teicoplanin': 0.6,  // High protein binding, lower sieving
-      'ceftazidime': 0.95, // Low protein binding
-      'meropenem': 0.92,   // Low protein binding
-      'piperacillintazobactam': 0.88 // Moderate protein binding
+      'ceftazidime': 0.95, // SC ~0.95 from literature
+      'meropenem': 0.92,   // SC 0.92-0.95 from literature
+      'piperacillintazobactam': 0.88, // SC ~0.88 from literature
+      'cefepime': 0.95,    // SC ~0.95 from literature
+      'linezolid': 0.95,   // SC ~0.95 from literature
+      'gentamicin': 0.9,   // Aminoglycoside with adsorption
+      'fluconazole': 1.0,  // Low protein binding, high SC
+      'colistin': 0.7      // Variable clearance
     };
 
     const baseCoefficients = coefficients[filterType] || coefficients['high-flux'];
@@ -369,47 +525,6 @@ export class PKCalculationService {
       highBinding: baseCoefficients.highBinding * drugAdjustment,
       lowBinding: baseCoefficients.lowBinding * drugAdjustment
     };
-  }
-
-  private static calculatePercentTimeAboveMIC(dose: number, vd: number, ke: number, mic: number, interval: number): number {
-    // Calculate initial concentration after dose
-    const c0 = dose / vd;
-    
-    // If initial concentration is below MIC, no time above MIC
-    if (c0 <= mic) {
-      return 0;
-    }
-    
-    // Calculate time when concentration drops to MIC level
-    // C(t) = C0 * e^(-ke * t)
-    // When C(t) = MIC: MIC = C0 * e^(-ke * t)
-    // Solving for t: t = ln(C0/MIC) / ke
-    const timeToReachMIC = Math.log(c0 / mic) / ke;
-    
-    // If time to reach MIC is greater than dosing interval, 
-    // concentration stays above MIC for the entire interval
-    if (timeToReachMIC >= interval) {
-      return 100;
-    }
-    
-    // Calculate percentage of dosing interval where concentration > MIC
-    const percentTimeAbove = (timeToReachMIC / interval) * 100;
-    
-    return Math.max(0, percentTimeAbove);
-  }
-
-  private static generateConcentrationCurve(dose: number, vd: number, ke: number, interval: number) {
-    const points = [];
-    const c0 = dose / vd;
-    
-    // Generate curve for 24 hours
-    for (let t = 0; t <= 24; t += 0.5) {
-      const cycleTime = t % interval;
-      const concentration = c0 * Math.exp(-ke * cycleTime);
-      points.push({ time: t, concentration });
-    }
-    
-    return points;
   }
 
   private static generateDoseRecommendation(input: PatientInput, drugProfile: any, percentTimeAboveMic: number) {
@@ -425,17 +540,33 @@ export class PKCalculationService {
       rationale += ' (Standard guidelines - no platform studies available)';
     }
     
-    // Adjust based on patient factors with study verification note
+    // Enhanced patient factor adjustments
     if (input.liverDisease) {
-      rationale += '. Liver disease present - dosing adjustment per clinical studies.';
+      rationale += '. Liver disease present - reduced non-renal clearance considered.';
     }
     
     if (input.ecmoTreatment) {
-      rationale += '. ECMO therapy increases Vd - loading dose recommended per research.';
+      rationale += '. ECMO therapy increases Vd and may reduce clearance - loading dose and TDM recommended.';
     }
     
-    if (input.mic && percentTimeAboveMic < 40) {
-      rationale += ` Current %T>MIC is ${percentTimeAboveMic.toFixed(1)}% - consider optimization per available studies.`;
+    if (input.tpeTreatment && drugProfile.pkParameters.proteinBinding > 0.8) {
+      rationale += '. TPE treatment - administer after plasma exchange for highly bound drugs.';
+    }
+    
+    // PD target-based recommendations (book chapter page 21)
+    if (input.mic && percentTimeAboveMic > 0) {
+      const drugName = input.antibioticName.toLowerCase().replace(/[-\s]/g, '');
+      const pdTargets: Record<string, number> = {
+        'meropenem': 40,
+        'piperacillintazobactam': 50,
+        'cefepime': 60,
+        'ceftazidime': 40
+      };
+      
+      const target = pdTargets[drugName];
+      if (target && percentTimeAboveMic < target) {
+        rationale += ` Current %T>MIC is ${percentTimeAboveMic.toFixed(1)}% (target ≥${target}%) - consider dose optimization or extended infusion.`;
+      }
     }
     
     return { dose, rationale };
@@ -465,12 +596,13 @@ export class PKCalculationService {
     const recommendations: string[] = [];
     const halfLife = Math.log(2) / eliminationRate;
 
-    // Drug-specific toxicity thresholds and targets
+    // Enhanced drug-specific targets from literature
     const drugTargets: Record<string, {
       aucToxicity?: number;
       aucTarget?: { min: number; max: number };
       timeMicTarget?: number;
       troughTarget?: { min: number; max: number };
+      peakTarget?: { min: number; max: number };
     }> = {
       vancomycin: {
         aucToxicity: 700,
@@ -492,6 +624,11 @@ export class PKCalculationService {
       linezolid: {
         aucToxicity: 400,
         aucTarget: { min: 200, max: 350 }
+      },
+      gentamicin: {
+        aucToxicity: 300,
+        peakTarget: { min: 5, max: 10 },
+        troughTarget: { min: 0.5, max: 2 }
       }
     };
 
@@ -524,12 +661,11 @@ export class PKCalculationService {
       recommendations.push(`📊 Prolonged half-life (${halfLife.toFixed(1)} hours) detected - recommend TDM to guide therapy`);
     }
 
-    // Special recommendations for vancomycin
+    // Drug-specific TDM recommendations
     if (normalizedDrugName === 'vancomycin') {
-      recommendations.push(`🩸 Recommend trough monitoring before 4th dose and AUC calculation for optimal dosing`);
+      recommendations.push(`🩸 Recommend trough monitoring before 4th dose and AUC calculation for optimal dosing (target AUC 400-600 mg·h/L)`);
     }
 
-    // Special recommendations for linezolid
     if (normalizedDrugName === 'linezolid') {
       if (halfLife > 12) {
         recommendations.push(`⚠️ Extended linezolid half-life suggests accumulation risk - monitor for peripheral neuropathy and thrombocytopenia`);
@@ -544,37 +680,43 @@ export class PKCalculationService {
     clearance: string;
     sievingCoefficient: string;
     proteinBinding: string;
+    residualRenal: string;
   } {
-    // Evidence-based sources for each drug parameter
+    // Enhanced evidence-based sources for each drug parameter
     const drugSources: Record<string, {
       volumeOfDistribution: string;
       clearance: string;
       proteinBinding: string;
     }> = {
       vancomycin: {
-        volumeOfDistribution: "Roberts et al., 2012 (0.7 L/kg)",
-        clearance: "Roberts et al., 2012 (1.0-1.4 L/h CRRT)",
-        proteinBinding: "Rybak et al., 2020 (10% binding)"
+        volumeOfDistribution: "Roberts et al., 2012 (0.7 L/kg) - ICU population",
+        clearance: "Roberts et al., 2012 (1.0-1.4 L/h CRRT) - Evidence-based range",
+        proteinBinding: "Rybak et al., 2020 (50% binding) - Updated guideline"
       },
       meropenem: {
-        volumeOfDistribution: "Seyler et al., 2011 (0.25 L/kg)",
-        clearance: "Seyler et al., 2011 (1.8-2.4 L/h CRRT)",
-        proteinBinding: "Thalhammer et al., 1997 (2% binding)"
+        volumeOfDistribution: "Seyler et al., 2011 (0.25 L/kg) - CRRT population",
+        clearance: "Seyler et al., 2011 (1.8-2.4 L/h CRRT) - Multi-center study",
+        proteinBinding: "Thalhammer et al., 1997 (2% binding) - Low protein binding"
       },
       piperacillintazobactam: {
-        volumeOfDistribution: "Arzuaga et al., 2005 (0.18 L/kg)",
-        clearance: "Arzuaga et al., 2005 (1.5-2.1 L/h CRRT)",
-        proteinBinding: "Valtonen et al., 2001 (30% binding)"
+        volumeOfDistribution: "Arzuaga et al., 2005 (0.18 L/kg) - CRRT patients",
+        clearance: "Arzuaga et al., 2005 (1.5-2.1 L/h CRRT) - Clinical validation",
+        proteinBinding: "Valtonen et al., 2001 (30% binding) - Moderate binding"
       },
       cefepime: {
-        volumeOfDistribution: "Malone et al., 2001 (0.2 L/kg)",
-        clearance: "Malone et al., 2001 (1.4-1.8 L/h CRRT)",
-        proteinBinding: "Barbhaiya et al., 1992 (20% binding)"
+        volumeOfDistribution: "Malone et al., 2001 (0.2 L/kg) - CRRT study",
+        clearance: "Malone et al., 2001 (1.4-1.8 L/h CRRT) - Clinical data",
+        proteinBinding: "Barbhaiya et al., 1992 (20% binding) - Low-moderate binding"
       },
       linezolid: {
-        volumeOfDistribution: "Swoboda et al., 2010 (0.65 L/kg)",
-        clearance: "Swoboda et al., 2010 (0.4-0.6 L/h CRRT)",
-        proteinBinding: "Stalker et al., 2003 (31% binding)"
+        volumeOfDistribution: "Swoboda et al., 2010 (0.65 L/kg) - CRRT patients",
+        clearance: "Swoboda et al., 2010 (0.4-0.6 L/h CRRT) - Minimal removal",
+        proteinBinding: "Stalker et al., 2003 (31% binding) - Moderate binding"
+      },
+      gentamicin: {
+        volumeOfDistribution: "Keller et al., 2008 (0.25 L/kg) - Aminoglycoside",
+        clearance: "Keller et al., 2008 (0.5-1.0 L/h CRRT) - Variable clearance",
+        proteinBinding: "Destache et al., 1990 (0-30% binding) - Minimal binding"
       }
     };
 
@@ -589,7 +731,8 @@ export class PKCalculationService {
       volumeOfDistribution: sources.volumeOfDistribution,
       clearance: sources.clearance,
       sievingCoefficient: `Filter manufacturer data and Adcock et al., 2017 (efficiency: ${crrtCalculations.filterEfficiency})`,
-      proteinBinding: sources.proteinBinding
+      proteinBinding: sources.proteinBinding,
+      residualRenal: 'Hsu et al., NEJM 2021; doi:10.1056/NEJMoa2103753 (2021 CKD-EPI equation)'
     };
   }
 }
