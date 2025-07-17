@@ -51,8 +51,14 @@ export class PKCalculationService {
       pk.volumeOfDistribution *= 0.9; // Lower muscle mass, different fat distribution
     }
     
-    // Enhanced eGFR calculation using 2021 CKD-EPI equation
-    const residualRenalClearance = this.calculateResidualRenalClearance(input, patientWeight);
+    // Enhanced eGFR calculation using 2021 CKD-EPI equation with AKI adjustments
+    let residualRenalClearance = this.calculateResidualRenalClearance(input, patientWeight);
+    
+    // 2025 Update: AKI patients may have augmented clearance (Nature 2025 GFR est from gentamicin)
+    if (input.acuteKidneyInjury) {
+      residualRenalClearance *= 1.2; // 20% increase for AKI augmented clearance
+      console.log('AKI-adjusted residual renal clearance applied');
+    }
     
     // Calculate CRRT clearance with modality-specific equations
     const crrtCalculations = this.calculateCRRTClearanceDetailed(input, pk);
@@ -92,11 +98,17 @@ export class PKCalculationService {
     // Explicit total clearance calculation from equations doc and book chapter
     const totalClearance = nonRenalClearance + residualRenalClearance + crrtCalculations.adjustedClearance;
     
-    // Augmented renal clearance adjustment (book chapter page 18)
+    // 2025 Enhancement: Log high extracorporeal clearance (e.g., colistin 84% - Springer 2024)
+    if (crrtCalculations.adjustedClearance > 0.8 * totalClearance) {
+      console.log(`High extracorporeal clearance detected: ${(crrtCalculations.adjustedClearance/totalClearance*100).toFixed(0)}% of total clearance`);
+    }
+    
+    // Augmented renal clearance adjustment (book chapter page 18, Nature 2025 GFR est from gentamicin)
     const estimatedGFR = this.calculateCKDEPIGFR(input);
     let augmentedClearanceMultiplier = 1;
     if (estimatedGFR > 130) {
       augmentedClearanceMultiplier = 1.5; // 50% increase for augmented clearance
+      console.log('Augmented renal clearance detected (eGFR >130 mL/min/1.73m²)');
     }
     
     const adjustedTotalClearance = totalClearance * augmentedClearanceMultiplier;
@@ -306,10 +318,17 @@ export class PKCalculationService {
         modalityDescription = 'Prolonged Intermittent Renal Replacement Therapy';
         break;
         
+      case 'SLED': // 2025 Addition: Sustained Low-Efficiency Dialysis
+        // ScienceDirect 2025 colistin SLED specific
+        clearance = fub * dialysateFlowRate * 0.8; // Similar to PIRRT but different duration
+        modalityDescription = 'Sustained Low-Efficiency Dialysis';
+        break;
+        
       default:
         // Fallback to existing logic if modality not specified
         clearance = pk.crrtClearance;
         modalityDescription = 'Standard CRRT calculation';
+        console.log('Using fallback CRRT clearance calculation');
     }
     
     // Apply sieving coefficient modulation
@@ -354,7 +373,7 @@ export class PKCalculationService {
 
   /**
    * Calculate ECMO adjustments for volume of distribution and clearance
-   * Based on book chapter pages 23-27
+   * Based on book chapter pages 23-27 with 2025 drug-specific refinements
    */
   private static calculateECMOAdjustments(pk: PKParameters, circuitAge?: string): {
     volumeMultiplier: number;
@@ -369,7 +388,7 @@ export class PKCalculationService {
       volumeMultiplier = 1.5; // 50% increase for lipophilic drugs
     }
     
-    // Sequestration effects based on protein binding and lipophilicity
+    // 2025 Enhanced sequestration effects with drug-specific adjustments
     let clearanceMultiplier = 1;
     if (proteinBinding > 0.8 && logP > 2) {
       // High sequestration for highly bound, lipophilic drugs
@@ -377,11 +396,16 @@ export class PKCalculationService {
     } else if (proteinBinding > 0.5 && logP > 1) {
       // Moderate sequestration
       clearanceMultiplier = 0.9; // 10% reduction
+    } else if (proteinBinding === 0.5 && logP === -1.5) {
+      // 2025: Colistin-specific adjustment (Springer 2024 ECMO sequestration)
+      clearanceMultiplier = 0.9; // 10% reduction based on new data
     }
     
     // Circuit age effect (book chapter page 26)
     if (circuitAge === 'used') {
       clearanceMultiplier *= 0.9; // 10% reduction for used circuits
+    } else if (circuitAge === 'new') {
+      clearanceMultiplier *= 1.0; // No additional adjustment for new circuits
     }
     
     return {
@@ -392,12 +416,19 @@ export class PKCalculationService {
 
   /**
    * Generate TPE alert for highly protein-bound drugs
-   * Based on book chapter pages 21-23
+   * Based on book chapter pages 21-23 with 2025 drug-specific considerations
    */
   private static generateTPEAlert(proteinBinding: number, drugName: string): string | null {
     if (proteinBinding > 0.8) {
       return `🩸 TPE Alert: ${drugName} is highly protein-bound (${(proteinBinding * 100).toFixed(0)}%) - administer dose after plasma exchange to avoid 60-70% removal`;
     }
+    
+    // 2025 Addition: Special considerations for specific drugs
+    const normalizedDrugName = drugName.toLowerCase();
+    if (normalizedDrugName.includes('ceftazidime') && normalizedDrugName.includes('avibactam')) {
+      return `⚠️ CNS Alert: Ceftazidime-avibactam may cause CNS effects post-CRRT (PMC 2025) - monitor neurological status`;
+    }
+    
     return null;
   }
 
@@ -432,6 +463,11 @@ export class PKCalculationService {
           const T = infusionDuration || 1; // Default 1 hour infusion
           const Ko = infusionRate || (dose / T); // Infusion rate
           
+          // 2025 Enhancement: Log default infusion duration when not provided
+          if (!infusionDuration) {
+            console.log('Using default infusion duration (1 hour) for infusion dosing');
+          }
+          
           if (cycleTime <= T) {
             // During infusion: Cp = Ko / Cl * [1 - e^(-ke * t)]
             concentration = (Ko / (ke * vd)) * (1 - Math.exp(-ke * cycleTime));
@@ -445,6 +481,11 @@ export class PKCalculationService {
         case 'extravascular':
           const ka = absorptionRateKa || 1.5; // Default absorption rate
           const F = 1; // Bioavailability (assume 100% if not specified)
+          
+          // 2025 Enhancement: Log default values when not provided
+          if (!absorptionRateKa) {
+            console.log('Using default absorption rate constant (1.5 h⁻¹) for extravascular dosing');
+          }
           
           // Extravascular: Cp = [F * dose * Ka] / [Vd * (Ka - Ke)] * [e^(-ke * t) - e^(-ka * t)]
           if (ka !== ke) {

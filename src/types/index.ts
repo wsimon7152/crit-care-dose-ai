@@ -36,7 +36,7 @@ export interface PatientInput {
   infectionType?: string;
   sourceOfInfection?: string;
   mic?: number;
-  crrtModality?: 'CVVH' | 'CVVHD' | 'CVVHDF' | 'PIRRT';
+  crrtModality?: 'CVVH' | 'CVVHD' | 'CVVHDF' | 'PIRRT' | 'SLED';
   filterType?: string;
   dilutionMode?: 'pre' | 'post';
   dosingMethod?: 'bolus' | 'infusion' | 'extravascular';
@@ -45,6 +45,7 @@ export interface PatientInput {
   tpeTreatment?: boolean;
   circuitAge?: 'new' | 'used';
   sepsis?: boolean;
+  acuteKidneyInjury?: boolean;
 }
 
 export interface PKParameters {
