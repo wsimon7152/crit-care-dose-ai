@@ -608,47 +608,173 @@ export class PKCalculationService {
   } {
     const pk = drugProfile.pkParameters;
     const tdmTargets = drugProfile.tdmTargets;
-    const totalClearance = this.calculateTotalClearance(input);
-    const interval = input.useEI_CI ? (input.eiDuration || 3) : (pk.interval || 12);
+    const standardDose = pk.standardDose;
     
-    let adjustedDose = pk.standardDose;
-    let targetDescription = '';
-
-    // Compute based on preferred target
-    if (tdmTargets.auc && (!input.preferredTarget || input.preferredTarget === 'AUC')) {
-      const targetAUC = (tdmTargets.auc.min + tdmTargets.auc.max) / 2;
-      adjustedDose = Math.round((targetAUC * totalClearance / (24 / interval)) / 250) * 250;
-      targetDescription = `AUC ${targetAUC} mg·h/L`;
-    } else if (tdmTargets.percentTimeAboveMic && (!input.preferredTarget || input.preferredTarget === '%T>MIC')) {
-      // Start with standard dose and adjust until target met
-      const targetPct = tdmTargets.percentTimeAboveMic.min;
-      
-      while (percentTimeAboveMic < targetPct && adjustedDose < pk.standardDose * 4) {
-        adjustedDose *= 1.25;
-        // Recalculate %T>MIC with new dose
-        const updatedPercentTimeAboveMic = this.calculatePercentTimeAboveMIC(adjustedDose, input);
-        if (updatedPercentTimeAboveMic >= targetPct) break;
+    // Determine primary target based on preferred target or default
+    const preferredTarget = input.preferredTarget || this.getPrimaryTarget(tdmTargets);
+    
+    // Calculate total clearance (this mirrors main calculation)
+    const patientWeight = input.weight || 70;
+    let residualRenalClearance = this.calculateResidualRenalClearance(input, patientWeight);
+    if (input.acuteKidneyInjury) {
+      residualRenalClearance *= 1.2;
+    }
+    
+    const crrtCalculations = this.calculateCRRTClearanceDetailed(input, pk);
+    let nonRenalClearance = pk.nonRenalClearance || pk.hepaticClearance || 0.3;
+    
+    // Apply comorbidity adjustments
+    if (input.liverDisease) nonRenalClearance *= 0.7;
+    if (input.sepsis) nonRenalClearance *= 0.7;
+    if (input.heartDisease) nonRenalClearance *= 0.8;
+    if (input.heartFailure) nonRenalClearance *= 0.6;
+    
+    // Apply ECMO adjustments
+    if (input.ecmoTreatment) {
+      const ecmoAdjustments = this.calculateECMOAdjustments(pk, input.circuitAge);
+      nonRenalClearance *= ecmoAdjustments.clearanceMultiplier;
+    }
+    
+    const totalClearance = nonRenalClearance + residualRenalClearance + crrtCalculations.adjustedClearance;
+    
+    // Augmented clearance adjustment
+    const estimatedGFR = this.calculateCKDEPIGFR(input);
+    const augmentedClearanceMultiplier = estimatedGFR > 130 ? 1.5 : 1;
+    const adjustedTotalClearance = totalClearance * augmentedClearanceMultiplier;
+    
+    let adjustedDose = standardDose;
+    let rationale = '';
+    let suggestEI = false;
+    
+    // Dynamic dosing based on preferred target
+    switch (preferredTarget) {
+      case 'AUC':
+        if (tdmTargets.auc) {
+          const targetAUC = tdmTargets.auc.midpoint || (tdmTargets.auc.min + tdmTargets.auc.max) / 2;
+          const interval = pk.interval || 8;
+          adjustedDose = (targetAUC * adjustedTotalClearance) / (24 / interval);
+          adjustedDose = Math.round(adjustedDose / 250) * 250; // Round to nearest 250mg
+          
+          const currentAUC = (standardDose * (24 / interval)) / adjustedTotalClearance;
+          
+          if (currentAUC > tdmTargets.auc.max) {
+            adjustedDose *= 0.75; // Reduce 25% for toxicity
+            adjustedDose = Math.round(adjustedDose / 250) * 250;
+            rationale = `Reduced to avoid toxicity per 2025 PMC12055491. Adjusted from standard ${standardDose}mg to ${adjustedDose}mg to meet target AUC ${targetAUC} mg·h/L.`;
+          } else if (currentAUC < tdmTargets.auc.min) {
+            rationale = `Increased for efficacy per book page 21. Adjusted from standard ${standardDose}mg to ${adjustedDose}mg to meet target AUC ${targetAUC} mg·h/L.`;
+          } else {
+            rationale = `Adjusted from standard ${standardDose}mg to ${adjustedDose}mg to meet target AUC ${targetAUC} mg·h/L.`;
+          }
+        }
+        break;
+        
+      case '%T>MIC':
+        if (tdmTargets.timeMIC && input.mic) {
+          const targetPercentTime = tdmTargets.timeMIC.midpoint || (tdmTargets.timeMIC.min + tdmTargets.timeMIC.max) / 2;
+          
+          // Cap %T>MIC at 100% and check for toxicity via AUC proxy
+          if (percentTimeAboveMic > 100) {
+            adjustedDose *= 0.8; // Reduce 20% for impossible %T>MIC
+            adjustedDose = Math.round(adjustedDose / 250) * 250;
+            rationale = `Reduced to avoid toxicity per 2025 PMC12055491. %T>MIC >100% indicates potential overdosing.`;
+          } else if (tdmTargets.auc) {
+            // Check AUC proxy for toxicity
+            const interval = pk.interval || 8;
+            const currentAUC = (standardDose * (24 / interval)) / adjustedTotalClearance;
+            if (currentAUC > tdmTargets.auc.max) {
+              adjustedDose *= 0.8; // Reduce 20% for toxicity
+              adjustedDose = Math.round(adjustedDose / 250) * 250;
+              rationale = `Reduced to avoid toxicity per 2025 PMC12055491. AUC proxy indicates potential toxicity risk.`;
+            }
+          }
+          
+          // Auto-suggest EI if %T>MIC below target
+          if (percentTimeAboveMic < targetPercentTime && !input.useEI_CI) {
+            suggestEI = true;
+            rationale += ` Suggest EI 3h to improve %T>MIC without dose increase per 2025 PMC11844199.`;
+          } else if (percentTimeAboveMic < targetPercentTime) {
+            // Simulate dose increases to meet target
+            let testDose = standardDose;
+            let iterations = 0;
+            while (iterations < 10) { // Prevent infinite loops
+              testDose *= 1.25; // Increase 25%
+              const testDailyDose = testDose * (24 / (pk.interval || 8));
+              const testAUC = testDailyDose / adjustedTotalClearance;
+              const testVd = (pk.volumeOfDistribution || 0.7) * patientWeight;
+              const testKe = adjustedTotalClearance / testVd;
+              const testC0 = testDose / testVd;
+              
+              if (testC0 > input.mic) {
+                const testTimeToMIC = Math.log(testC0 / input.mic) / testKe;
+                const testPercentTime = Math.min((testTimeToMIC / (pk.interval || 8)) * 100, 100);
+                if (testPercentTime >= targetPercentTime) {
+                  adjustedDose = Math.round(testDose / 250) * 250;
+                  rationale = `Increased for efficacy per book page 21. Adjusted from standard ${standardDose}mg to ${adjustedDose}mg to meet target %T>MIC ${targetPercentTime}%.`;
+                  break;
+                }
+              }
+              iterations++;
+            }
+            
+            // If still below target, suggest EI
+            if (percentTimeAboveMic < targetPercentTime && !suggestEI) {
+              suggestEI = true;
+              rationale += ` Suggest EI 3h to improve %T>MIC without dose increase per 2025 PMC11844199.`;
+            }
+          }
+        }
+        break;
+        
+      case 'Peak/Trough':
+        if (tdmTargets.peak || tdmTargets.trough) {
+          const targetPeak = tdmTargets.peak?.midpoint || (tdmTargets.peak?.min + tdmTargets.peak?.max) / 2;
+          const targetTrough = tdmTargets.trough?.midpoint || (tdmTargets.trough?.min + tdmTargets.trough?.max) / 2;
+          
+          if (targetPeak) {
+            const vd = (pk.volumeOfDistribution || 0.7) * patientWeight;
+            adjustedDose = targetPeak * vd;
+            adjustedDose = Math.round(adjustedDose / 250) * 250;
+            rationale = `Adjusted from standard ${standardDose}mg to ${adjustedDose}mg to meet target peak ${targetPeak} mg/L.`;
+          } else if (targetTrough) {
+            // For trough targeting, use steady-state calculations
+            const ke = adjustedTotalClearance / ((pk.volumeOfDistribution || 0.7) * patientWeight);
+            const interval = pk.interval || 8;
+            adjustedDose = (targetTrough * adjustedTotalClearance * interval) / (1 - Math.exp(-ke * interval));
+            adjustedDose = Math.round(adjustedDose / 250) * 250;
+            rationale = `Adjusted from standard ${standardDose}mg to ${adjustedDose}mg to meet target trough ${targetTrough} mg/L.`;
+          }
+        }
+        break;
+    }
+    
+    // Apply EI/CI if suggested or already enabled
+    if (suggestEI || input.useEI_CI) {
+      const infusionDuration = input.eiDuration || 3;
+      if (input.useEI_CI) {
+        rationale += ` Using extended infusion (${infusionDuration}h) for better PD per 2025 Wiley review.`;
       }
-      targetDescription = `%T>MIC ${targetPct}%`;
     }
-
-    // Safety checks and adjustments
-    if (adjustedDose > pk.standardDose * 2) {
-      adjustedDose *= 0.8;
-      targetDescription += " (Reduced 20% to avoid toxicity per 2025 PMC12055491)";
-    } else if (adjustedDose < pk.standardDose * 0.5) {
-      adjustedDose *= 1.2;
-      targetDescription += " (Increased for efficacy per book page 21)";
+    
+    // Ensure minimum dosing
+    if (adjustedDose < standardDose * 0.5) {
+      adjustedDose = standardDose * 0.5;
+      rationale += ' Dose capped at 50% of standard for safety.';
     }
-
-    // Extended/Continuous infusion consideration
+    
+    // Ensure maximum dosing safety
+    if (adjustedDose > standardDose * 3) {
+      adjustedDose = standardDose * 3;
+      rationale += ' Dose capped at 300% of standard for safety.';
+    }
+    
     const dosingMethod = input.useEI_CI 
-      ? `as ${interval}h infusion` 
-      : `q${interval}h`;
+      ? `as ${input.eiDuration || 3}h infusion` 
+      : `q${pk.interval || 8}h`;
     
     return {
-      dose: `${Math.round(adjustedDose)}mg ${dosingMethod}`,
-      rationale: `Adjusted from standard ${pk.standardDose}mg to meet target ${targetDescription}`
+      dose: `${adjustedDose}mg ${dosingMethod}`,
+      rationale: rationale || `Standard dosing maintained at ${standardDose}mg every ${pk.interval || 8} hours.`
     };
   }
 
@@ -825,5 +951,13 @@ export class PKCalculationService {
     const pkStandardDose = 1000; // assume standard dose 1000 mg
     const percent = Math.min(100, (dose / pkStandardDose) * basePercent);
     return percent;
+  }
+
+  private static getPrimaryTarget(tdmTargets: any): string {
+    // Determine primary target based on available TDM targets
+    if (tdmTargets.auc) return 'AUC';
+    if (tdmTargets.timeMIC) return '%T>MIC';
+    if (tdmTargets.peak || tdmTargets.trough) return 'Peak/Trough';
+    return 'AUC'; // Default fallback
   }
 }
