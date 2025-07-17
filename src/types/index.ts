@@ -46,6 +46,10 @@ export interface PatientInput {
   circuitAge?: 'new' | 'used';
   sepsis?: boolean;
   acuteKidneyInjury?: boolean;
+  preferredTarget?: 'AUC' | '%T>MIC' | 'Peak/Trough';
+  useEI_CI?: boolean;
+  eiDuration?: number;
+  eiRate?: number;
 }
 
 export interface PKParameters {

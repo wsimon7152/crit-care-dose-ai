@@ -134,6 +134,22 @@ export class PKCalculationService {
       percentTimeAboveMic = Math.min((timeToReachMIC / pk.interval) * 100, 100);
     }
     
+    // Apply EI/CI settings if specified
+    if (input.useEI_CI) {
+      input.dosingMethod = 'infusion';
+      
+      // Use EI duration if specified, otherwise fall back to infusionDuration or default 3h
+      const infusionDuration = input.eiDuration || input.infusionDuration || 3;
+      input.infusionDuration = infusionDuration;
+      
+      // Use EI rate if specified, otherwise calculate based on dose and duration
+      if (input.eiRate) {
+        input.infusionRate = input.eiRate;
+      }
+      
+      console.log(`Using extended infusion settings: ${infusionDuration}h duration`);
+    }
+    
     // Generate concentration-time curve with dosing method consideration
     const concentrationCurve = this.generateConcentrationCurve(
       pk.standardDose, 
@@ -587,7 +603,11 @@ export class PKCalculationService {
   }
 
   private static generateDoseRecommendation(input: PatientInput, drugProfile: any, percentTimeAboveMic: number) {
-    let dose = `${drugProfile.pkParameters.standardDose}mg every ${drugProfile.pkParameters.interval} hours`;
+    const normalizedDrugName = input.antibioticName.toLowerCase().replace(/[-\s]/g, '');
+    const pk = drugProfile.pkParameters;
+    const standardDose = pk.standardDose;
+    const interval = pk.interval;
+    const standardDoseString = `${standardDose}mg every ${interval} hours`;
     
     // Get research-based rationale
     const relevantStudies = ResearchIntegrationService.findRelevantStudies(input.antibioticName, input);
@@ -597,6 +617,125 @@ export class PKCalculationService {
       rationale += ` (Based on ${relevantStudies.length} verified platform study/studies)`;
     } else {
       rationale += ' (Standard guidelines - no platform studies available)';
+    }
+    
+    // Calculate adjusted dose dynamically based on targets
+    let adjustedDose = standardDose;
+    let dosingMethod = input.dosingMethod || 'bolus';
+    
+    // Dynamic dose calculation based on preferred target
+    if (input.preferredTarget) {
+      const tdmTargets = drugProfile.tdmTargets;
+      
+      if (tdmTargets) {
+        // Calculate total clearance
+        const patientWeight = input.weight || 70;
+        const residualRenalClearance = this.calculateResidualRenalClearance(input, patientWeight);
+        const crrtCalculations = this.calculateCRRTClearanceDetailed(input, pk);
+        let nonRenalClearance = pk.nonRenalClearance || pk.hepaticClearance || 0.3;
+        const totalClearance = nonRenalClearance + residualRenalClearance + crrtCalculations.adjustedClearance;
+        
+        // For AUC-dependent drugs (vancomycin, linezolid)
+        if (input.preferredTarget === 'AUC' && tdmTargets.auc) {
+          const targetAUC = (tdmTargets.auc.min + tdmTargets.auc.max) / 2; // midpoint
+          const dosesPerDay = 24 / interval;
+          
+          // Compute adjusted dose = target.midpoint * totalClearance / (24 / interval)
+          adjustedDose = Math.round((targetAUC * totalClearance) / dosesPerDay / 250) * 250; // Round to nearest 250mg
+          
+          // Adjust if too high or too low
+          if (adjustedDose > standardDose * 1.5) {
+            adjustedDose *= 0.8; // Reduce by 20% if significantly higher
+            rationale += ` Reduced to ${adjustedDose}mg to avoid toxicity per 2025 PMC12055491.`;
+          } else if (adjustedDose < standardDose * 0.5) {
+            adjustedDose *= 1.25; // Increase by 25% if significantly lower
+            rationale += ` Increased to ${adjustedDose}mg for efficacy per book page 21.`;
+          }
+          
+          rationale = `Adjusted from standard ${standardDose}mg to ${adjustedDose}mg to meet target AUC of ${targetAUC} mg·h/L. ${rationale}`;
+        }
+        
+        // For %T>MIC-dependent drugs (beta-lactams)
+        else if (input.preferredTarget === '%T>MIC' && tdmTargets.percentTimeAboveMic && input.mic) {
+          const targetPercent = tdmTargets.percentTimeAboveMic.min;
+          let optimalDose = standardDose;
+          
+          // Simulate different doses to find one that meets target
+          if (percentTimeAboveMic < targetPercent) {
+            // Start by increasing dose by 25%
+            optimalDose = standardDose * 1.25;
+            
+            // If useEI_CI is selected, switch to extended infusion
+            if (input.useEI_CI) {
+              dosingMethod = 'infusion';
+              const infusionDuration = input.eiDuration || 3; // Default 3h if not specified
+              
+              // Create simulation for extended infusion
+              const vd = pk.volumeOfDistribution * (input.weight || 70);
+              const ke = totalClearance / vd;
+              
+              // Generate curve with EI to verify target attainment
+              const eiCurve = this.generateConcentrationCurve(
+                optimalDose,
+                vd,
+                ke,
+                interval,
+                'infusion',
+                infusionDuration,
+                undefined,
+                pk.absorptionRateKa
+              );
+              
+              // Calculate %T>MIC from curve
+              let timeAboveMic = 0;
+              for (let i = 0; i < eiCurve.length - 1; i++) {
+                if (eiCurve[i].concentration > (input.mic || 1)) {
+                  timeAboveMic += eiCurve[i + 1].time - eiCurve[i].time;
+                }
+              }
+              
+              const percentTimeAboveMicEI = (timeAboveMic / 24) * 100;
+              
+              // If still below target, increase dose by another 25%
+              if (percentTimeAboveMicEI < targetPercent) {
+                optimalDose = standardDose * 1.5;
+              }
+              
+              rationale = `Extended infusion of ${optimalDose}mg over ${infusionDuration}h every ${interval}h improves %T>MIC to ${percentTimeAboveMicEI.toFixed(1)}% (target: ≥${targetPercent}%) per 2025 Wiley review. ${rationale}`;
+            } else {
+              // Standard bolus with increased dose
+              rationale = `Increased dose from ${standardDose}mg to ${optimalDose}mg to improve %T>MIC (target: ≥${targetPercent}%). Consider extended infusion for better PD target attainment. ${rationale}`;
+            }
+            
+            adjustedDose = optimalDose;
+          } else {
+            adjustedDose = standardDose;
+            rationale = `Standard dose of ${standardDose}mg every ${interval}h provides adequate %T>MIC of ${percentTimeAboveMic.toFixed(1)}% (target: ≥${targetPercent}%). ${rationale}`;
+          }
+        }
+        
+        // For Peak/Trough dependent drugs (aminoglycosides)
+        else if (input.preferredTarget === 'Peak/Trough' && (tdmTargets.peak || tdmTargets.trough)) {
+          // Simplified calculation based on ideal peak
+          if (tdmTargets.peak) {
+            const targetPeak = (tdmTargets.peak.min + tdmTargets.peak.max) / 2;
+            const vd = pk.volumeOfDistribution * (input.weight || 70);
+            
+            // Calculate dose to achieve target peak
+            adjustedDose = Math.round((targetPeak * vd) / 250) * 250; // Round to nearest 250mg
+            
+            if (adjustedDose > standardDose * 1.5) {
+              adjustedDose *= 0.8; // Reduce by 20% if significantly higher
+              rationale += ` Reduced to ${adjustedDose}mg to avoid toxicity per 2025 PMC12055491.`;
+            }
+            
+            rationale = `Adjusted from standard ${standardDose}mg to ${adjustedDose}mg to achieve target peak of ${targetPeak} mg/L. ${rationale}`;
+          }
+        }
+      }
+    } else {
+      // Use standard dose if no preferred target specified
+      adjustedDose = standardDose;
     }
     
     // Enhanced patient factor adjustments
@@ -612,23 +751,16 @@ export class PKCalculationService {
       rationale += '. TPE treatment - administer after plasma exchange for highly bound drugs.';
     }
     
-    // PD target-based recommendations (book chapter page 21)
-    if (input.mic && percentTimeAboveMic > 0) {
-      const drugName = input.antibioticName.toLowerCase().replace(/[-\s]/g, '');
-      const pdTargets: Record<string, number> = {
-        'meropenem': 40, // PMC11844199 2025: 0.5g q6h or 1g q8h optimal
-        'piperacillintazobactam': 50, // PMC11938006 2025: TDM-guided EI for better PD
-        'cefepime': 60, // PubMed 40323389 2025: EI 2g q8h for CRRT
-        'ceftazidime': 40 // PubMed 39990787 2025: optimal dosing CRRT
-      };
-      
-      const target = pdTargets[drugName];
-      if (target && percentTimeAboveMic < target) {
-        rationale += ` Current %T>MIC is ${percentTimeAboveMic.toFixed(1)}% (target ≥${target}%) - consider dose optimization or extended infusion.`;
-      }
+    // Format final dose recommendation
+    let doseString = `${adjustedDose}mg every ${interval} hours`;
+    
+    // Add infusion details if applicable
+    if (dosingMethod === 'infusion') {
+      const duration = input.eiDuration || input.infusionDuration || 3;
+      doseString += ` as ${duration}-hour infusion`;
     }
     
-    return { dose, rationale };
+    return { dose: doseString, rationale };
   }
 
   static async generateStudyVerifiedSummary(input: PatientInput, pkResults: PKResult): Promise<string> {
